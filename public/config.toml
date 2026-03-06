@@ -1,0 +1,78 @@
+[default]
+app.name = "chongming"
+app.version = "0.1.0"
+app.description = "基于 FastAPI 的 chongming 打包脚手架"
+app.debug = false
+env = "production"
+
+[database]
+type = "sqlite"
+url = "sqlite+aiosqlite:///./database.db"
+generate_schemas = true  # 生产环境使用迁移工具
+
+[database.sqlite]
+echo = true
+pool_size = 20
+max_overflow = 10
+pool_timeout = 30
+pool_recycle = 300
+pool_pre_ping = true
+connect_args.timeout = 15
+connect_args.check_same_thread = false
+
+[security]
+secret_key = "your-secret-key-change-in-production"
+algorithm = "HS256"
+access_token_expire_minutes = 30
+refresh_token_expire_days = 7
+jwt_cache_db_path = "jwt_cache"
+max_sessions_per_user = 5
+
+[development]
+env = "development"
+debug = true
+
+[development.server]
+host = "127.0.0.1"
+port = 8001
+reload = true
+
+[development.logging]
+level = "DEBUG"
+file = "logs/dev.log"
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+[development.cors]
+allow_origins = ["*"]
+allow_credentials = true
+allow_methods = ["*"]
+allow_headers = ["*"]
+
+[production]
+env = "production"
+debug = false
+
+[production.server]
+host = "0.0.0.0"
+port = 8000
+reload = false
+workers = 4
+
+[production.logging]
+level = "INFO"
+file = "logs/prod.log"
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+[production.cors]
+allow_origins = ["https://yourdomain.com", "http://localhost:8000", "http://127.0.0.1:8000"]
+allow_credentials = true
+allow_methods = ["GET", "POST", "PUT", "DELETE"]
+allow_headers = ["Authorization", "Content-Type"]
+
+[production.module_system]
+type = "module-bank"
+path = ["resources/app.mbank", "resources/plugins.mbank"]
+
+[production.file_system]
+type = "svfs"
+path = "resources/application.vfs"

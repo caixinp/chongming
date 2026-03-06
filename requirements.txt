@@ -1,0 +1,16 @@
+aerich
+fastapi[uvicorn]
+module-bank==0.1.1
+passlib
+pydantic-settings
+pydantic[email]
+sqlite-vfs
+toml
+tortoise-orm
+uvicorn[standard]
+sqlitedict
+pyjwt
+bcrypt==4.0.1
+pyinstaller
+aerich
+requests

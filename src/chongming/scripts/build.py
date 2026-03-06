@@ -1,0 +1,253 @@
+from module_bank import PythonToSQLite
+from module_bank.encryption import Encryption
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import asyncio
+
+
+def create_admin():
+    try:
+        cmd = [
+            sys.executable,
+            "../src/chongming/scripts/create_admin.py",
+        ]
+        print(f"正在运行 create_admin.py: {' '.join(cmd)}")
+
+        # 创建包含 UTF-8 编码的环境变量
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+
+        result = subprocess.run(
+            cmd,
+            cwd="./build",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",  # 明确指定编码
+            errors="replace",  # 替换无法解码的字符
+            env=env,  # 传递修改后的环境变量
+        )
+
+        if result.returncode == 0:
+            print("创建管理员用户成功")
+            print(result.stdout)
+        else:
+            print("创建管理员用户失败")
+            # 安全地打印错误信息，避免编码问题
+            try:
+                print("错误信息:", result.stderr)
+            except UnicodeEncodeError:
+                print(
+                    "错误信息:", result.stderr.encode("ascii", "ignore").decode("ascii")
+                )
+    except Exception as e:
+        print("创建管理员用户失败")
+        print(f"异常: {e}")
+
+
+def run_pyarmor_obfuscate():
+    # pyarmor obfuscate --output=obfuscated_script.py original_script.py
+    obfuscate_files = [
+        ("main.py", "./"),
+        ("server.py", "./"),
+        ("utils/launch.py", "./utils"),
+        ("utils/config.py", "./utils"),
+    ]
+    for file, output in obfuscate_files:
+        cmd = [
+            "pyarmor",
+            "gen",
+            f"--output={output}",
+            file,
+        ]
+        result = subprocess.run(cmd, cwd="./build", capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"打包文件: {file} 失败")
+            print(result.stderr)
+            return
+        else:
+            print(result.stdout)
+        print(f"打包文件: {file}")
+
+
+def run_pyinstaller():
+    """运行 PyInstaller 打包成可执行文件"""
+    try:
+        # 构建 PyInstaller 命令
+        cmd = [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--onefile",
+            "--name",
+            "chongming",
+            "--distpath",
+            ".",
+            "--workpath",
+            "./build_temp",
+            "--specpath",
+            "./specs",
+            "--clean",
+            # 隐藏导入
+            "--hidden-import",
+            "utils",
+            "--hidden-import",
+            "utils.launch",
+            "--hidden-import",
+            "utils.config",
+            "--hidden-import",
+            "server",
+            "--hidden-import",
+            "module_bank",
+            "--hidden-import",
+            "fastapi",
+            "--hidden-import",
+            "fastapi.middleware.cors",
+            "--hidden-import",
+            "uvicorn",
+            "--hidden-import",
+            "sqlmodel",
+            "--hidden-import",
+            "aiosqlite",
+            "--hidden-import",
+            "pyjwt",
+            "--hidden-import",
+            "sqlitedict",
+            "--hidden-import",
+            "passlib",
+            "--hidden-import",
+            "passlib.context",
+            "--hidden-import",
+            "passlib.handlers.bcrypt",
+            "--hidden-import",
+            "jwt",
+            # 其他选项
+            "--icon",
+            "../../public/chongming.ico",
+            "main.py",
+        ]
+
+        print(f"正在运行 PyInstaller: {' '.join(cmd)}")
+        result = subprocess.run(cmd, cwd="./build", capture_output=True, text=True)
+
+        if result.returncode == 0:
+            print("PyInstaller 打包成功！")
+            print(result.stdout)
+        else:
+            print("PyInstaller 打包失败！")
+            print("错误信息:", result.stderr)
+
+    except FileNotFoundError:
+        print("错误：未找到 PyInstaller，请先安装 PyInstaller：pip install pyinstaller")
+    except Exception as e:
+        print(f"PyInstaller 执行出错: {e}")
+
+
+async def init_database():
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from ..app.core.config import get_config
+    from sqlmodel import SQLModel, text
+    from sqlalchemy.exc import OperationalError
+
+    database = get_config()["database"]
+    database_type = database["type"]
+    database_config = database.get(database_type, None)
+    if database_config is None:
+        raise ValueError("配置不存在")
+
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///./build/database.db", **database_config
+    )
+
+    async with engine.begin() as conn:
+        if database_type == "sqlite":
+            await conn.execute(text("PRAGMA journal_mode=WAL"))
+            await conn.execute(text("PRAGMA synchronous=NORMAL"))
+        try:
+            await conn.run_sync(
+                lambda conn: SQLModel.metadata.create_all(bind=conn, checkfirst=True)
+            )
+        except OperationalError as e:
+            if "already exists" in str(e):
+                raise
+
+
+async def main():
+    # 打包模块
+    key = Encryption.generate_key()
+    resources_path = Path("resources")
+    if not resources_path.exists():
+        resources_path.mkdir()
+    app_packer = PythonToSQLite("./resources/app.mbank", key)
+    app_packer.pack_directory("src/chongming/app", "app")
+    app_packer.verify_package_structure()
+    app_packer.delete_source_code(None)
+
+    plugin_packer = PythonToSQLite("./resources/plugins.mbank", key)
+    plugin_packer.pack_directory("src/plugins", "plugins")
+    plugin_packer.verify_package_structure()
+    plugin_packer.delete_source_code(None)
+
+    # 创建 build 目录
+    build_path = Path("build")
+    if build_path.exists() and build_path.is_dir():
+        shutil.rmtree("build")
+
+    os.makedirs("build", exist_ok=True)
+
+    # 复制 utils 文件夹到 build 文件夹
+    utils_path = Path("utils")
+    if utils_path.exists():
+        target_utils_path = Path("build") / "utils"
+        shutil.copytree(utils_path, target_utils_path, dirs_exist_ok=True)
+        print(f"已复制 utils 文件夹到 {target_utils_path}")
+
+    # 复制 resources 文件夹到 build 文件夹
+    resources_path = Path("resources")
+    if resources_path.exists():
+        target_resources_path = Path("build") / "resources"
+        shutil.copytree(resources_path, target_resources_path, dirs_exist_ok=True)
+        print(f"已复制 resources 文件夹到 {target_resources_path}")
+
+    print("模块打包完成")
+
+    # 复制 main.py 到 build 文件夹
+    shutil.copy("public/main.py", "build")
+    shutil.copy("public/server.py", "build")
+    # 复制 config.toml 到 build 文件夹
+    shutil.copy("public/config.toml", "build")
+    # 复制 utils 文件夹到 build 文件夹
+    shutil.copytree("public/utils", "build/utils")
+
+    with open("./build/utils/launch.py", "r", encoding="utf-8") as f:
+        context = f.read()
+        context = context.replace("key = None", f"key = '{key}'")
+        with open("./build/utils/launch.py", "w", encoding="utf-8") as f:
+            f.write(context)
+
+    # 混淆
+    run_pyarmor_obfuscate()
+
+    # 运行 PyInstaller
+    run_pyinstaller()
+
+    # 清理临时文件
+    shutil.rmtree(r"build/build_temp", ignore_errors=True)
+    shutil.rmtree(r"build/specs", ignore_errors=True)
+    shutil.rmtree(r"build/utils", ignore_errors=True)
+    shutil.rmtree(r"build/pyarmor_runtime_000000", ignore_errors=True)
+    os.remove(r"build/main.py")
+    os.remove(r"build/server.py")
+    # os.remove(r"build/config.toml")
+
+    print("构建完成")
+
+    # 初始化数据库
+    await init_database()
+
+
+def build():
+    asyncio.run(main())
