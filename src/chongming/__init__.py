@@ -1,6 +1,6 @@
 import uvicorn
 from .app.core.config import load_config
-from .app.core.logger import setup_logging, get_logger
+from .app.core.logger import get_logger
 
 
 def serve():
