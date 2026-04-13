@@ -77,7 +77,7 @@ def run_pyinstaller():
             "--hidden-import",
             "pyjwt",
             "--hidden-import",
-            "sqlitedict",
+            "diskcache",
             "--hidden-import",
             "passlib",
             "--hidden-import",
