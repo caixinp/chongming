@@ -1,6 +1,7 @@
+from typing import Optional
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
 
 from ..model.user import User
 from ..core.security import get_password_hash

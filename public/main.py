@@ -1,7 +1,7 @@
 # main.py - 修复 reload 问题
 #!/usr/bin/env python3
 """
-FastAPI + Tortoise-ORM + chongming 示例
+FastAPI chongming 示例
 主入口文件，适配 chongming 打包系统
 """
 import sys
@@ -19,9 +19,8 @@ def app_run(app_config: dict, default_config: dict):
         default_config: 默认配置
     """
     import uvicorn
-    from app.core.logger import setup_logging, get_logger  # type: ignore
+    from app.core.logger import get_logger  # type: ignore
 
-    setup_logging(app_config["logging"])
     logger = get_logger("app")
 
     # 获取服务器配置

@@ -10,13 +10,14 @@ readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
     "aiosqlite",
+    "apscheduler",
     "bcrypt==4.0.1",
+    "diskcache>=5.6.3",
     "fastapi[uvicorn]",
     "module-bank",
     "passlib[bcrypt]",
     "pyjwt",
     "sqlite-vfs",
-    "sqlitedict",
     "sqlmodel[aiosqlite]",
     "tomli",
     "typing-extensions",

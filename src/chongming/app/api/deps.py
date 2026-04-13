@@ -5,11 +5,11 @@ from ..service.auth import get_auth_service
 from ..core.jwt_cache import TokenData
 
 
-security = HTTPBearer()
+access_scheme = HTTPBearer(scheme_name="AccessToken")
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials = Depends(access_scheme),
 ) -> TokenData:
     """
     获取当前用户依赖项

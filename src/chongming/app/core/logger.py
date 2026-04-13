@@ -1,30 +1,43 @@
 import logging
+import datetime
 from pathlib import Path
-from .config import Logging
 from logging.handlers import RotatingFileHandler
+
+from ..core.config import get_config
+
+
+config = get_config()
+env = config["default"]["env"]
+server_config = config[env]["server"]
+log_config = config[env]["logging"]
 
 
 class ExcludeWatchFilesFilter(logging.Filter):
+    def __init__(self):
+        super().__init__()
+        self._filter_starts_with_tulpe = (
+            "watchfiles",
+            "aiosqlite",
+            "apscheduler",
+            "sqlalchemy",
+            "sqlitedict",
+        )
+
+    # 重写过滤方法
     def filter(self, record):
-        # 如果日志记录来自 watchfiles 模块，则不记录（返回 False）
-        return not record.name.startswith("watchfiles")
+        return not record.name.startswith(self._filter_starts_with_tulpe)
 
 
-def setup_logging(log_config: Logging):
+def setup_logging(logger: logging.Logger, log_name: str = "app"):
     log_level = getattr(logging, log_config["level"], logging.INFO)
     log_format = log_config["format"]
     # 创建文件夹
     log_file_path = Path(log_config["file"])
-    log_file_dir = log_file_path.parent
-    if log_file_dir != Path("."):
-        log_file_dir.mkdir(parents=True, exist_ok=True)
-
-    # 设置特定日志级别的过滤
-    logging.getLogger("watchfiles").setLevel(logging.WARNING)
+    if log_file_path != Path("."):
+        log_file_path.mkdir(parents=True, exist_ok=True)
 
     # 配置根日志记录器
-    root_logger = logging.getLogger()
-    root_logger.setLevel(log_level)
+    logger.setLevel(log_level)
 
     # 创建格式化器
     formatter = logging.Formatter(log_format)
@@ -34,7 +47,7 @@ def setup_logging(log_config: Logging):
     backup_count = log_config.get("backup_count", 5)  # 默认保留 5 个备份
 
     file_handler = RotatingFileHandler(
-        log_config["file"],
+        f"{log_config['file']}/{log_name}-{datetime.date.today()}.log",
         encoding="utf-8",
         maxBytes=max_bytes,
         backupCount=backup_count,
@@ -48,8 +61,8 @@ def setup_logging(log_config: Logging):
     console_handler.addFilter(ExcludeWatchFilesFilter())
 
     # 添加处理器到根日志记录器
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
 
     print(
         f"日志系统已配置 - 级别: {logging.getLevelName(log_level)}, 文件: {log_config['file']} "
@@ -59,6 +72,5 @@ def setup_logging(log_config: Logging):
 
 def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
-    # 为每个logger添加过滤器
-    logger.addFilter(ExcludeWatchFilesFilter())
+    setup_logging(logger, name)
     return logger

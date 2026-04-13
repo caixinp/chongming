@@ -1,7 +1,7 @@
 [default]
 app.name = "chongming"
 app.version = "chongming"
-app.description = "基于 FastAPI 和 Tortoise-ORM 的 chongming 打包脚手架"
+app.description = "基于 FastAPI 的 chongming 打包脚手架"
 app.debug = false
 env = "development"
 
@@ -20,12 +20,17 @@ pool_pre_ping = true
 connect_args.timeout = 15
 connect_args.check_same_thread = false
 
+[scheduler]
+job_store_path = "scheduler_jobs.db"
+
+[cache]
+cache_store_path = "./"
+
 [security]
 secret_key = "your-secret-key-change-in-production"
 algorithm = "HS256"
 access_token_expire_minutes = 30
 refresh_token_expire_days = 7
-jwt_cache_db_path = "jwt_cache"
 max_sessions_per_user = 5
 
 [development]
@@ -39,7 +44,7 @@ reload = true
 
 [development.logging]
 level = "DEBUG"
-file = "logs/dev.log"
+file = "logs"
 format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 [development.cors]
@@ -60,7 +65,7 @@ workers = 4
 
 [production.logging]
 level = "INFO"
-file = "logs/prod.log"
+file = "logs"
 format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 max_size =  10485760 # 10MB
 backup_count = 5  # 最多保存 10 个日志文件

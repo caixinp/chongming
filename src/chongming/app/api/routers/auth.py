@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_session
-from ...core.jwt_cache import get_jwt_cache, TokenData
+from ...core.jwt_cache import TokenData
 from ...core.security import verify_password
 from ...service.user import UserService
 from ...service.auth import get_auth_service
@@ -13,7 +13,8 @@ from ..deps import get_current_user
 
 router = APIRouter(tags=["authentication"])
 
-security = HTTPBearer()
+access_scheme = HTTPBearer(scheme_name="AccessToken")
+refresh_scheme = HTTPBearer(scheme_name="RefreshToken")
 
 
 @router.post("/register", response_model=UserRead)
@@ -50,29 +51,14 @@ async def login(
         raise HTTPException(status_code=400, detail="邮箱或密码错误")
     if not user.is_active:
         raise HTTPException(status_code=400, detail="用户被禁用")
-
-    cache = get_jwt_cache()
-    user_data_dict = {
-        "sub": str(user.id),
-        "email": user.email,
-        "username": user.username,
-    }
-    token = cache.create_token(
-        user_id=str(user.id),
-        user_data=user_data_dict,
-        token_type="access",
-        device_id=None,
-        user_agent=request.headers.get("user-agent") if request else None,
-        ip_address=request.client.host if request else None,  # type: ignore
-    )
-
-    return {"access_token": token, "token_type": "bearer"}
+    auth_service = get_auth_service()
+    return await auth_service.create_tokens(user, request, device_id=None)
 
 
 @router.post("/refresh", response_model=dict, summary="刷新访问令牌")
 async def refresh_token(
     request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials = Depends(refresh_scheme),
     session: AsyncSession = Depends(get_session),
 ):
     auth_service = get_auth_service()
@@ -92,7 +78,7 @@ async def refresh_token(
 
 @router.post("/logout")
 async def logout(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials = Depends(access_scheme),
 ):
     auth_service = get_auth_service()
     token = credentials.credentials
@@ -100,7 +86,7 @@ async def logout(
     return {"message": "登出成功"}
 
 
-@router.post("/logout-all", summary="等出所有设备")
+@router.post("/logout-all", summary="登出所有设备")
 async def logout_all(current_user: TokenData = Depends(get_current_user)):
     auth_service = get_auth_service()
     await auth_service.logout_all(current_user.user_id)

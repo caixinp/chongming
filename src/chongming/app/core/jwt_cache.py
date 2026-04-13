@@ -1,17 +1,15 @@
-import jwt
 import json
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List, TypedDict
-from sqlitedict import SqliteDict
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 from dataclasses import dataclass, asdict
-
-# from pydantic import BaseModel
 import hashlib
 import threading
-from pathlib import Path
+
+import jwt
 
 from .config import get_config
+from .cache import get_cache
 
 
 @dataclass
@@ -43,43 +41,9 @@ class JWTCache:
     def __init__(self, db_path: Optional[str] = None):
         self.config = get_config()
 
-        if db_path is None:
-            db_path = self.config["security"]["jwt_cache_db_path"]
-
-        db_file_path = Path(db_path)
-        db_file_path.mkdir(parents=True, exist_ok=True)
-
         self.lock = threading.RLock()
 
-        # 主 Token 缓存
-        self.token_db = SqliteDict(
-            rf"{db_path}/tokens.cache",
-            tablename="tokens",
-            autocommit=True,
-            encode=self._json_encode,
-            decode=self._json_decode,
-            journal_mode="WAL",
-        )
-
-        # 黑名单缓存
-        self.blacklist_db = SqliteDict(
-            rf"{db_path}/blacklist.cache",
-            tablename="blacklist",
-            autocommit=True,
-            encode=json.dumps,
-            decode=json.loads,
-            journal_mode="WAL",
-        )
-
-        # 用户会话索引
-        self.user_sessions_db = SqliteDict(
-            rf"{db_path}/user_sessions.cache",
-            tablename="user_sessions",
-            autocommit=True,
-            encode=json.dumps,
-            decode=json.loads,
-            journal_mode="WAL",
-        )
+        self.cache = get_cache()
 
         self.secret_key = self.config["security"]["secret_key"]
         self.algorithm = self.config["security"]["algorithm"]
@@ -168,7 +132,7 @@ class JWTCache:
             )
 
             # 存储到缓存
-            self.token_db[token_hash] = asdict(cache_data)
+            self.cache.set(f"token:{token_hash}", asdict(cache_data))
 
             # 更新用户会话索引
             self._update_user_session_index(user_id, token_hash, token_type)
@@ -189,8 +153,8 @@ class JWTCache:
     ):
         """更新用户会话索引"""
         with self.lock:
-            key = f"{user_id}:{token_type}"
-            user_tokens = self.user_sessions_db.get(key, [])
+            key = f"user:{user_id}:{token_type}"
+            user_tokens = self.cache.get(key, [])
 
             # 添加新 token
             user_tokens.append(token_hash)
@@ -200,36 +164,36 @@ class JWTCache:
             if len(user_tokens) > max_tokens:
                 user_tokens = user_tokens[-max_tokens:]
 
-            self.user_sessions_db[key] = user_tokens
+            self.cache.set(key, user_tokens)
 
     def _enforce_session_limit(self, user_id: str):
         """强制用户会话限制"""
         max_sessions = self.config["security"]["max_sessions_per_user"]
 
-        access_key = f"{user_id}:access"
-        refresh_key = f"{user_id}:refresh"
+        access_key = f"user:{user_id}:access"
+        refresh_key = f"user:{user_id}:refresh"
 
         # 检查 access token 数量
-        access_tokens = self.user_sessions_db.get(access_key, [])
+        access_tokens = self.cache.get(access_key, [])
         if len(access_tokens) > max_sessions:
             # 删除最早的 token
             tokens_to_remove = access_tokens[:-max_sessions]
             for token_hash in tokens_to_remove:
-                if token_hash in self.token_db:
-                    del self.token_db[token_hash]
+                if self.cache.exists(f"token:{token_hash}"):
+                    self.cache.delete(f"token:{token_hash}")
 
             # 更新索引
-            self.user_sessions_db[access_key] = access_tokens[-max_sessions:]
+            self.cache.set(access_key, access_tokens[-max_sessions:])
 
         # 检查 refresh token 数量
-        refresh_tokens = self.user_sessions_db.get(refresh_key, [])
+        refresh_tokens = self.cache.get(refresh_key, [])
         if len(refresh_tokens) > max_sessions:
             tokens_to_remove = refresh_tokens[:-max_sessions]
             for token_hash in tokens_to_remove:
-                if token_hash in self.token_db:
-                    del self.token_db[token_hash]
+                if self.cache.exists(f"token:{token_hash}"):
+                    self.cache.delete(f"token:{token_hash}")
 
-            self.user_sessions_db[refresh_key] = refresh_tokens[-max_sessions:]
+            self.cache.set(refresh_key, refresh_tokens[-max_sessions:])
 
     def validate_token(
         self, token: str, token_type: str = "access"
@@ -259,14 +223,11 @@ class JWTCache:
             if not user_id or not jti:
                 return None
 
-            # 检查黑名单
             token_hash = self._hash_token(token)
-            if self._is_blacklisted(token_hash):
-                return None
 
             # 检查缓存
             with self.lock:
-                cache_data = self.token_db.get(token_hash)
+                cache_data = self.cache.get(f"token:{token_hash}")
                 if not cache_data:
                     return None
 
@@ -279,12 +240,12 @@ class JWTCache:
                 if datetime.utcnow() > expires_at:
                     # 标记为不活跃
                     cache_data["is_active"] = False
-                    self.token_db[token_hash] = cache_data
+                    self.cache.set(f"token:{token_hash}", cache_data)
                     return None
 
                 # 更新最后使用时间
                 cache_data["last_used"] = datetime.utcnow().isoformat()
-                self.token_db[token_hash] = cache_data
+                self.cache.set(f"token:{token_hash}", cache_data)
 
             return {
                 "user_id": user_id,
@@ -300,68 +261,38 @@ class JWTCache:
         except Exception:
             return None
 
-    def add_to_blacklist(self, token: str, reason: str = "logout"):
-        """添加 Token 到黑名单"""
-        token_hash = self._hash_token(token)
-        expire_time = datetime.utcnow() + timedelta(days=7)  # 黑名单保留7天
-
-        self.blacklist_db[token_hash] = {
-            "reason": reason,
-            "blacklisted_at": datetime.utcnow().isoformat(),
-            "expires_at": expire_time.isoformat(),
-        }
-
-    def _is_blacklisted(self, token_hash: str) -> bool:
-        """检查 Token 是否在黑名单中"""
-        with self.lock:
-            if token_hash not in self.blacklist_db:
-                return False
-
-            blacklist_data = self.blacklist_db[token_hash]
-            expires_at = datetime.fromisoformat(blacklist_data["expires_at"])
-
-            # 如果黑名单条目已过期，删除它
-            if datetime.utcnow() > expires_at:
-                del self.blacklist_db[token_hash]
-                return False
-
-            return True
-
     def invalidate_token(self, token: str):
         """使单个 Token 失效"""
         with self.lock:
             token_hash = self._hash_token(token)
 
-            # 添加到黑名单
-            self.add_to_blacklist(token)
-
             # 标记为不活跃
-            if token_hash in self.token_db:
-                cache_data = self.token_db[token_hash]
+            if self.cache.exists(f"token:{token_hash}"):
+                cache_data = self.cache.get(f"token:{token_hash}")
                 cache_data["is_active"] = False
-                self.token_db[token_hash] = cache_data
+                self.cache.set(f"token:{token_hash}", cache_data)
 
     def invalidate_user_tokens(self, user_id: str, token_type: Optional[str] = None):
         """使用户的所有 Token 失效"""
         with self.lock:
             if token_type:
-                keys = [f"{user_id}:{token_type}"]
+                keys = [f"user:{user_id}:{token_type}"]
             else:
-                keys = [f"{user_id}:access", f"{user_id}:refresh"]
+                keys = [f"user:{user_id}:access", f"{user_id}:refresh"]
 
             for key in keys:
-                token_hashes = self.user_sessions_db.get(key, [])
+                token_hashes = self.cache.get(key, [])
                 for token_hash in token_hashes:
                     # 添加到黑名单
                     # 注意：这里我们只有 token_hash，没有原始 token
                     # 所以只能标记为不活跃
-                    if token_hash in self.token_db:
-                        cache_data = self.token_db[token_hash]
+                    if self.cache.exists(f"token:{token_hash}"):
+                        cache_data = self.cache.get(f"token:{token_hash}")
                         cache_data["is_active"] = False
-                        self.token_db[token_hash] = cache_data
+                        self.cache.set(f"token:{token_hash}", cache_data)
 
                 # 清空用户会话索引
-                self.user_sessions_db[key] = []
+                self.cache.set(key, [])
 
     def get_user_sessions(self, user_id: str) -> List[Dict[str, Any]]:
         """获取用户的所有活跃会话"""
@@ -369,12 +300,12 @@ class JWTCache:
             sessions = []
 
             for token_type in ["access", "refresh"]:
-                key = f"{user_id}:{token_type}"
-                token_hashes = self.user_sessions_db.get(key, [])
+                key = f"user:{user_id}:{token_type}"
+                token_hashes = self.cache.get(key, [])
 
                 for token_hash in token_hashes:
-                    if token_hash in self.token_db:
-                        cache_data = self.token_db[token_hash]
+                    if self.cache.exists(f"token:{token_hash}"):
+                        cache_data = self.cache.get(f"token:{token_hash}")
 
                         # 检查是否活跃且未过期
                         if cache_data.get("is_active", True):
@@ -403,27 +334,13 @@ class JWTCache:
             current_time = datetime.utcnow()
 
             # 清理过期 Token
-            for token_hash, data in list(self.token_db.items()):
-                expires_at = datetime.fromisoformat(data["expires_at"])
+            for token_hash in self.cache.keys("token:*"):
+                expires_at = datetime.fromisoformat(self.cache.get(token_hash))
                 if current_time > expires_at:
-                    del self.token_db[token_hash]
-                    cleaned_count += 1
-
-            # 清理过期黑名单
-            for token_hash, data in list(self.blacklist_db.items()):
-                expires_at = datetime.fromisoformat(data["expires_at"])
-                if current_time > expires_at:
-                    del self.blacklist_db[token_hash]
+                    self.cache.delete(token_hash)
                     cleaned_count += 1
 
             return cleaned_count
-
-    def close(self):
-        with self.lock:
-            """关闭所有数据库连接"""
-            self.token_db.close()
-            self.blacklist_db.close()
-            self.user_sessions_db.close()
 
 
 # 全局缓存实例

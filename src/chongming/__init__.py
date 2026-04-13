@@ -8,7 +8,6 @@ def serve():
     env = config["default"]["env"]
     server_config = config[env]["server"]
     log_config = config[env]["logging"]
-    setup_logging(log_config)
     logget = get_logger("app")
     logget.info(f"启动服务: {server_config}")
     logget.info(f"启动日志: {log_config}")

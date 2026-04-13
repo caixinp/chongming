@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from typing import TypedDict, Literal, Optional, cast
+from typing import TypedDict, Literal, Optional, cast, List
 
 
 if sys.version_info >= (3, 11):
@@ -53,7 +53,6 @@ class Security(TypedDict):
     secret_key: str
     algorithm: Literal["HS256"]
     access_token_expire_minutes: int
-    jwt_cache_db_path: str
     refresh_token_expire_days: int
     max_sessions_per_user: int
 
@@ -74,20 +73,20 @@ class Logging(TypedDict):
 
 
 class Cors(TypedDict, total=False):
-    allow_origins: list[str]
+    allow_origins: List[str]
     allow_credentials: bool
-    allow_methods: list[str]
-    allow_headers: list[str]
+    allow_methods: List[str]
+    allow_headers: List[str]
 
 
 class ModuleSystem(TypedDict, total=False):
     type: str
-    path: list[str]
+    path: List[str]
 
 
 class FileSystem(TypedDict, total=False):
     type: str
-    path: list[str]
+    path: List[str]
 
 
 class Env(TypedDict, total=False):
@@ -99,9 +98,19 @@ class Env(TypedDict, total=False):
     file_system: FileSystem
 
 
+class Scheduler(TypedDict):
+    job_store_path: str
+
+
+class Cache(TypedDict):
+    cache_store_path: str
+
+
 class Config(TypedDict):
     default: Default
     database: Database
+    scheduler: Scheduler
+    cache: Cache
     security: Security
     development: Env
     production: Env

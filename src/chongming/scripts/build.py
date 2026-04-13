@@ -8,46 +8,6 @@ import sys
 import asyncio
 
 
-def create_admin():
-    try:
-        cmd = [
-            sys.executable,
-            "../src/chongming/scripts/create_admin.py",
-        ]
-        print(f"正在运行 create_admin.py: {' '.join(cmd)}")
-
-        # 创建包含 UTF-8 编码的环境变量
-        env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
-        env["PYTHONUTF8"] = "1"
-
-        result = subprocess.run(
-            cmd,
-            cwd="./build",
-            capture_output=True,
-            text=True,
-            encoding="utf-8",  # 明确指定编码
-            errors="replace",  # 替换无法解码的字符
-            env=env,  # 传递修改后的环境变量
-        )
-
-        if result.returncode == 0:
-            print("创建管理员用户成功")
-            print(result.stdout)
-        else:
-            print("创建管理员用户失败")
-            # 安全地打印错误信息，避免编码问题
-            try:
-                print("错误信息:", result.stderr)
-            except UnicodeEncodeError:
-                print(
-                    "错误信息:", result.stderr.encode("ascii", "ignore").decode("ascii")
-                )
-    except Exception as e:
-        print("创建管理员用户失败")
-        print(f"异常: {e}")
-
-
 def run_pyarmor_obfuscate():
     # pyarmor obfuscate --output=obfuscated_script.py original_script.py
     obfuscate_files = [
@@ -112,6 +72,8 @@ def run_pyinstaller():
             "sqlmodel",
             "--hidden-import",
             "aiosqlite",
+            "--hidden-import",
+            "apscheduler",
             "--hidden-import",
             "pyjwt",
             "--hidden-import",

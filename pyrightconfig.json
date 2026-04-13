@@ -4,6 +4,6 @@
     "pythonVersion": "3.11",
     "extraPaths": [
         "./",
-        "./.venv/lib/python3.12/site-packages"
+        "./.venv/lib/python3.11/site-packages"
     ]
 }

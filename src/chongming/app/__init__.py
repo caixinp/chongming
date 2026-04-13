@@ -1,15 +1,26 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Depends
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import SQLModel, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.exc import OperationalError
+from pydantic import BaseModel
 
 from .core.config import get_config
-from .core.jwt_cache import get_jwt_cache
+from .core.cache import get_cache
 from .core.logger import get_logger
+from .core.scheduler import get_task_service, get_task_service_instance, TaskService
 from .api import api_router
+from .task.execute_background import execute_background_task
+from .task import init_tasks_callback
+
+
+class TaskRequest(BaseModel):
+    task_name: str
+    interval: int
+
 
 config = get_config()
 logger = get_logger("app")
@@ -31,6 +42,12 @@ async def lifespan(app: FastAPI):
     database_config = database.get(database_type, None)
     if database_config is None:
         raise ValueError("配置不存在")
+
+    task_service = get_task_service_instance()
+
+    await task_service.start(init_tasks_callback)
+
+    app.state.task_service = task_service
 
     # 启动时：创建引擎和会话工厂，初始化数据库表
     engine = create_async_engine(database["url"], **database_config)
@@ -61,8 +78,9 @@ async def lifespan(app: FastAPI):
     yield  # 应用运行期间
 
     # 关闭时：释放引擎
+    await task_service.shutdown(wait=True)
     await engine.dispose()
-    get_jwt_cache().close()
+    get_cache().close()
 
 
 cors = config[env].get("cors", {})
@@ -87,19 +105,36 @@ app.include_router(api_router, prefix="/api/v1")
 async def root():
     """根路径，返回应用信息"""
     return {
-        "message": f"欢迎使用 {config["default"]["app"]["name"]}",
+        "message": f"欢迎使用 {config['default']['app']['name']}",
         "version": config["default"]["app"]["version"],
         "docs": "/docs" if config[env]["debug"] else None,
         "health": "/api/v1/health",
     }
 
 
+@app.post("/schedule")
+async def add_task(
+    request: TaskRequest, task_service: TaskService = Depends(get_task_service)
+):
+    """添加定时任务接口"""
+    job = await task_service.add_interval_job(
+        execute_background_task,
+        seconds=request.interval,
+        args=[request.task_name],
+        job_id=request.task_name,
+    )
+    return {"status": "success", "job_id": job.id}
+
+
 # 全局异常处理器
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
+async def global_exception_handler(_: Request, exc: Exception):
     """全局异常处理器"""
     logger.error(f"全局异常: {exc}")
-    return {
-        "error": "内部服务器错误",
-        "detail": str(exc) if config[env]["debug"] else "请查看服务器日志",
-    }
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "内部服务器错误",
+            "detail": str(exc) if config[env]["debug"] else "请查看服务器日志",
+        },
+    )

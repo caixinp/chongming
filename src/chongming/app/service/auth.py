@@ -8,9 +8,9 @@ from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..model.user import User
-from .user import UserService
 from ..core.jwt_cache import get_jwt_cache, TokenResponse, TokenData
 from ..core.config import get_config
+from .user import UserService
 
 
 class AuthService:
@@ -105,7 +105,7 @@ class AuthService:
         request: Optional[Request] = None,
     ) -> Optional[str]:
         """使用刷新令牌获取新的访问令牌"""
-        validation = self.jwt_cache.validate_token(refresh_token, token_type="access")
+        validation = self.jwt_cache.validate_token(refresh_token, token_type="refresh")
         if not validation:
             return None
 
