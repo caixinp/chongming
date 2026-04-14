@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Depends
@@ -12,6 +13,7 @@ from .core.config import get_config
 from .core.cache import get_cache
 from .core.logger import get_logger
 from .core.scheduler import get_task_service, get_task_service_instance, TaskService
+from .core.static_files import static_files_handler
 from .api import api_router
 from .task.execute_background import execute_background_task
 from .task import init_tasks_callback
@@ -124,6 +126,10 @@ async def add_task(
         job_id=request.task_name,
     )
     return {"status": "success", "job_id": job.id}
+
+
+if os.path.exists("static.svfs"):
+    app.mount("/static", static_files_handler, name="static")
 
 
 # 全局异常处理器

@@ -6,6 +6,46 @@ import shutil
 import subprocess
 import sys
 import asyncio
+from sqlite_vfs.core import SQLiteVFS
+from sqlite_vfs.folder_packer import FolderPacker
+
+
+def build_vue_web():
+    """打包 Vue Web"""
+    # 构建 Vue Web 命令
+    dist_dir = "./src/chongming-web/dist"
+    output_db = "./build/static.svfs"
+    fs_name = "frontend"
+    cmd = [
+        "npm",
+        "run",
+        "build",
+    ]
+    result = subprocess.run(
+        cmd,
+        cwd="./src/chongming-web",
+        capture_output=True,
+        text=True,
+        shell=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if result.returncode != 0:
+        print("打包 Vue Web 失败")
+        print(result.stderr)
+    else:
+        vfs = SQLiteVFS(output_db, compress=False)
+        packer = FolderPacker(
+            sqlite_vfs=vfs,
+            exclude_patterns=[],
+            fs_name=fs_name,
+        )
+
+        try:
+            packer.pack_folder(dist_dir)
+            print(f"✅ 打包完成，文件保存为 {output_db}")
+        finally:
+            vfs.close()
 
 
 def run_pyarmor_obfuscate():
@@ -65,6 +105,8 @@ def run_pyinstaller():
             "--hidden-import",
             "fastapi",
             "--hidden-import",
+            "fastapi.staticfiles",
+            "--hidden-import",
             "fastapi.middleware.cors",
             "--hidden-import",
             "uvicorn",
@@ -75,8 +117,6 @@ def run_pyinstaller():
             "--hidden-import",
             "apscheduler",
             "--hidden-import",
-            "pyjwt",
-            "--hidden-import",
             "diskcache",
             "--hidden-import",
             "passlib",
@@ -84,6 +124,10 @@ def run_pyinstaller():
             "passlib.context",
             "--hidden-import",
             "passlib.handlers.bcrypt",
+            "--hidden-import",
+            "sqlite_vfs",
+            "--hidden-import",
+            "sqlite_vfs.core",
             "--hidden-import",
             "jwt",
             # 其他选项
@@ -209,6 +253,9 @@ async def main():
 
     # 初始化数据库
     await init_database()
+
+    # 构建 vue 项目
+    build_vue_web()
 
 
 def build():
