@@ -7,7 +7,7 @@ import os
 import sys
 import tempfile
 from contextlib import suppress
-from typing import Dict, List, Optional, Callable, AsyncGenerator, TypedDict, Any
+from typing import Dict, List, Optional, Callable, AsyncGenerator
 from datetime import datetime
 
 from fastapi import Request
@@ -101,7 +101,7 @@ class TaskService:
                 else:
                     import fcntl
 
-                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                    fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_UN)
             self.lock_file.close()
 
     async def add_interval_job(

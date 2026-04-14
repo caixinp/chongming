@@ -9,7 +9,7 @@ key = None
 def init_module_bank(config):
     MODULE_BANK_PATH_LIST = config["production"]["module_system"]["path"]
     for module_path in MODULE_BANK_PATH_LIST:
-        if os.path.exists(module_path) == False:
+        if not os.path.exists(module_path):
             raise ValueError(f"模块路径不存在: {module_path}")
 
     packer_list = [

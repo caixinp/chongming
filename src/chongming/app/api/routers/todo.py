@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...model.todo import TodoCreate, TodoUpdate, TodoRead
 from ...core.database import get_session
 from ...service.todo import TodoService
-from ...model.user import User
 from ..deps import get_current_user
 
 

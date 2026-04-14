@@ -1,9 +1,7 @@
 import os
-import mimetypes
 from fastapi import HTTPException
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
-from typing import Optional
 from sqlite_vfs.core import SQLiteVFS
 
 

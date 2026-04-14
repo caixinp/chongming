@@ -5,10 +5,10 @@ from typing import TypedDict, Literal, Optional, cast, List
 
 if sys.version_info >= (3, 11):
     import tomllib
-    from typing import Required, NotRequired
+    from typing import Required
 else:
     import tomli as tomllib
-    from typing_extensions import Required, NotRequired
+    from typing_extensions import Required
 
 # 设置 env 为 development 或 production
 

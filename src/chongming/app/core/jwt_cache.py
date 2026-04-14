@@ -278,7 +278,7 @@ class JWTCache:
             if token_type:
                 keys = [f"user:{user_id}:{token_type}"]
             else:
-                keys = [f"user:{user_id}:access", f"{user_id}:refresh"]
+                keys = [f"user:{user_id}:access", f"user:{user_id}:refresh"]
 
             for key in keys:
                 token_hashes = self.cache.get(key, [])

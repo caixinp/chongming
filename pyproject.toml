@@ -36,6 +36,7 @@ url = "https://mirrors.ustc.edu.cn/pypi/web/simple/"
 dev = [
     "pyarmor",
     "pyinstaller",
+    "ruff>=0.15.10",
 ]
 
 [tool.hatch.build.targets.wheel]
