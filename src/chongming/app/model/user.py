@@ -1,7 +1,13 @@
-from typing import Optional
+from typing import Optional, List, TYPE_CHECKING
 
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Relationship
 from pydantic import BaseModel
+
+from .relationship_table import UserRole
+from uuid import uuid4, UUID
+
+if TYPE_CHECKING:
+    from .role import Role
 
 
 class UserBase(SQLModel):
@@ -16,8 +22,9 @@ class UserBase(SQLModel):
 class User(UserBase, table=True):
     """用户模型"""
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     hashed_password: str
+    roles: List["Role"] = Relationship(back_populates="users", link_model=UserRole)
 
 
 class UserCreate(UserBase):
@@ -29,7 +36,7 @@ class UserCreate(UserBase):
 class UserRead(UserBase):
     """用户读取模型"""
 
-    id: int
+    id: UUID
 
 
 class UserLogin(BaseModel):

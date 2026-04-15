@@ -10,7 +10,10 @@ export default defineConfig({
     vue(),
     vueDevTools(),
   ],
-  base: '/stats/',
+  /** 
+   * 打包开启此配置项
+  */
+  base: '/static/',
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))

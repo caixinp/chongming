@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_session
-from ...core.jwt_cache import TokenData
+from ...core.jwt_cache import TokenData, TokenResponse, RefreshTokenResponse
 from ...core.security import verify_password
 from ...service.user import UserService
 from ...service.auth import get_auth_service
@@ -38,7 +38,7 @@ async def register(
     return user
 
 
-@router.post("/login")
+@router.post("/login", response_model=TokenResponse)
 async def login(
     user_data: UserLogin,
     request: Request,
@@ -55,7 +55,7 @@ async def login(
     return await auth_service.create_tokens(user, request, device_id=None)
 
 
-@router.post("/refresh", response_model=dict, summary="刷新访问令牌")
+@router.post("/refresh", response_model=RefreshTokenResponse, summary="刷新访问令牌")
 async def refresh_token(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(refresh_scheme),

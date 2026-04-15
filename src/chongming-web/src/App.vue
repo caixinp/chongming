@@ -1,6 +1,25 @@
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 import HelloWorld from './components/HelloWorld.vue'
+import { DefaultService } from './api/generated'
+
+const result = ref<any>(null)
+const loading = ref(true)
+const error = ref<string | null>(null)
+
+onMounted(async () => {
+  try {
+    const data = await DefaultService.rootGet()
+    result.value = data
+    console.log('API 请求成功:', data)
+  } catch (error: any) {
+    error.value = error.message || '请求失败'
+  } finally {
+    loading.value = false
+  }
+})
+
 </script>
 
 <template>
@@ -9,6 +28,13 @@ import HelloWorld from './components/HelloWorld.vue'
 
     <div class="wrapper">
       <HelloWorld msg="You did it!" />
+
+      <!-- 显示加载状态或错误信息 -->
+      <div v-if="loading">加载中...</div>
+      <div v-else-if="error" style="color: red;">{{ error }}</div>
+      <div v-else>
+        <p>请求结果: {{ result }}</p>
+      </div>
 
       <nav>
         <RouterLink to="/">Home</RouterLink>

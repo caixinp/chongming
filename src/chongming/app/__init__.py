@@ -1,7 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import SQLModel, text
@@ -12,10 +12,9 @@ from pydantic import BaseModel
 from .core.config import get_config
 from .core.cache import get_cache
 from .core.logger import get_logger
-from .core.scheduler import get_task_service, get_task_service_instance, TaskService
-from .core.static_files import static_files_handler
+from .core.scheduler import get_task_service_instance
+from .core.static_files import SVFSStaticFiles
 from .api import api_router
-from .task.execute_background import execute_background_task
 from .task import init_tasks_callback
 
 
@@ -45,12 +44,6 @@ async def lifespan(app: FastAPI):
     if database_config is None:
         raise ValueError("配置不存在")
 
-    task_service = get_task_service_instance()
-
-    await task_service.start(init_tasks_callback)
-
-    app.state.task_service = task_service
-
     # 启动时：创建引擎和会话工厂，初始化数据库表
     engine = create_async_engine(database["url"], **database_config)
     async_session_maker = async_sessionmaker(
@@ -76,6 +69,10 @@ async def lifespan(app: FastAPI):
             except OperationalError as e:
                 if "already exists" in str(e):
                     raise
+
+    task_service = get_task_service_instance(async_session_maker)
+    app.state.task_service = task_service
+    await task_service.start(init_tasks_callback)
 
     yield  # 应用运行期间
 
@@ -114,21 +111,23 @@ async def root():
     }
 
 
-@app.post("/schedule")
-async def add_task(
-    request: TaskRequest, task_service: TaskService = Depends(get_task_service)
-):
-    """添加定时任务接口"""
-    job = await task_service.add_interval_job(
-        execute_background_task,
-        seconds=request.interval,
-        args=[request.task_name],
-        job_id=request.task_name,
-    )
-    return {"status": "success", "job_id": job.id}
+# @app.post("/schedule")
+# async def add_task(
+#     request: TaskRequest, task_service: TaskService = Depends(get_task_service)
+# ):
+#     """添加定时任务接口"""
+#     job = await task_service.add_interval_job(
+#         execute_background_task,
+#         seconds=request.interval,
+#         args=[request.task_name],
+#         job_id=request.task_name,
+#     )
+#     return {"status": "success", "job_id": job.id}
 
 
 if os.path.exists("static.svfs"):
+    logger.info("静态文件已存在，将使用静态文件服务")
+    static_files_handler = SVFSStaticFiles(directory="/")
     app.mount("/static", static_files_handler, name="static")
 
 

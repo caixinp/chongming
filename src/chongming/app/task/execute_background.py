@@ -1,8 +1,15 @@
 from ..core.scheduler import logger
+from ..service.user import UserService
+from ..core.scheduler import get_task_service_instance
 
 
-async def execute_background_task(task_name: str):
-    from datetime import datetime
-
-    """模拟后台任务执行"""
-    logger.info(f"Executing task: {task_name} at {datetime.utcnow()}")
+async def dev_init_admin():
+    task_service = get_task_service_instance()
+    if task_service.async_session_maker is None:
+        return
+    async with task_service.async_session_maker() as session:
+        admin_user = await UserService.get_user_by_email("admin", session)
+        if admin_user:  # type: ignore
+            logger.info("管理员用户已存在")  # type: ignore
+            return
+        await UserService.create_user(session, "admin", "admin", is_superuser=True)  # type: ignore

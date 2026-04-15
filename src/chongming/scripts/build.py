@@ -157,6 +157,8 @@ async def init_database():
     from ..app.core.config import get_config
     from sqlmodel import SQLModel, text
     from sqlalchemy.exc import OperationalError
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from ..app.service.user import UserService
 
     database = get_config()["database"]
     database_type = database["type"]
@@ -167,6 +169,9 @@ async def init_database():
     engine = create_async_engine(
         "sqlite+aiosqlite:///./build/database.db", **database_config
     )
+    async_session_maker = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     async with engine.begin() as conn:
         if database_type == "sqlite":
@@ -176,9 +181,13 @@ async def init_database():
             await conn.run_sync(
                 lambda conn: SQLModel.metadata.create_all(bind=conn, checkfirst=True)
             )
+
         except OperationalError as e:
             if "already exists" in str(e):
                 raise
+    # 添加管理员用户
+    async with async_session_maker() as session:
+        await UserService.create_user(session, "admin", "admin", is_superuser=True)  # type: ignore
 
 
 async def main():

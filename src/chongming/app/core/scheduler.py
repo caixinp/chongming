@@ -48,7 +48,8 @@ def acquire_scheduler_lock():
 class TaskService:
     """任务调度服务"""
 
-    def __init__(self):
+    def __init__(self, async_session_maker=None):
+        self.async_session_maker = async_session_maker
         # 使用独立的 SQLite 数据库存储任务（与业务数据库分开）
         self.job_store_db_path = config.get("scheduler", {}).get(
             "job_store_path", "scheduler_jobs.db"
@@ -172,15 +173,21 @@ class TaskService:
     async def add_date_job(
         self,
         func: Callable,
-        run_date: datetime,
+        run_date: Optional[datetime] = None,
         job_id: Optional[str] = None,
         args: Optional[List] = None,
         kwargs: Optional[Dict] = None,
+        replace_existing: bool = True,
     ) -> Job:
         """添加一次性任务"""
         trigger = DateTrigger(run_date=run_date)
         job = self.scheduler.add_job(
-            func, trigger=trigger, id=job_id, args=args or [], kwargs=kwargs or {}
+            func,
+            trigger=trigger,
+            id=job_id,
+            args=args or [],
+            kwargs=kwargs or {},
+            replace_existing=replace_existing,
         )
         logger.info(f"添加一次性任务: {job.id}")
         return job
@@ -270,10 +277,10 @@ class TaskService:
 _task_service: Optional[TaskService] = None
 
 
-def get_task_service_instance():
+def get_task_service_instance(async_session_maker=None):
     global _task_service
     if _task_service is None:
-        _task_service = TaskService()
+        _task_service = TaskService(async_session_maker)
     return _task_service
 
 
