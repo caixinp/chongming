@@ -21,6 +21,7 @@ class ExcludeWatchFilesFilter(logging.Filter):
             "apscheduler",
             "sqlalchemy",
             "sqlitedict",
+            "sqlalchemy.engine.Engine",
         )
 
     # 重写过滤方法

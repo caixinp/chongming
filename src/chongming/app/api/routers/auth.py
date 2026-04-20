@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -113,7 +115,7 @@ async def get_current_user_info(
     current_user: TokenData = Depends(get_current_user),
 ):
     """获取当前登录用户的信息"""
-    user = await UserService.get_user_by_id(int(current_user.user_id), session)
+    user = await UserService.get_user_by_id(UUID(current_user.user_id), session)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
 

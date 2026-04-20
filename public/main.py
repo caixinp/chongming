@@ -27,6 +27,7 @@ def app_run(app_config: dict, default_config: dict):
     server_config = app_config.get("server", {})
     host = server_config.get("host", "0.0.0.0")
     port = server_config.get("port", 8000)
+    timeout_keep_alive = server_config.get("timeout_keep_alive", 5)
 
     # 打包环境强制禁用重载
     is_frozen = getattr(sys, "frozen", False)
@@ -54,6 +55,7 @@ def app_run(app_config: dict, default_config: dict):
         workers=workers,
         log_level="debug" if app_config.get("debug", False) else "info",
         access_log=True,
+        timeout_keep_alive=timeout_keep_alive,
     )
 
 

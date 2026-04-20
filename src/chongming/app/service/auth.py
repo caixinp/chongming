@@ -112,7 +112,7 @@ class AuthService:
         user_id = validation["user_id"]
 
         # 获取用户
-        user = await UserService.get_user_by_id(int(user_id), session)
+        user = await UserService.get_user_by_id(user_id, session)
         if not user:
             return None
 

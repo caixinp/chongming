@@ -4,6 +4,8 @@ app.version = "0.1.0"
 app.description = "基于 FastAPI 的 chongming 打包脚手架"
 app.debug = false
 env = "production"
+prefix = "/api/v1"
+upload_path = "uploads"
 
 [database]
 type = "sqlite"
@@ -11,7 +13,8 @@ url = "sqlite+aiosqlite:///./database.db"
 generate_schemas = true  # 生产环境使用迁移工具
 
 [database.sqlite]
-echo = true
+echo = false
+echo_pool = false
 pool_size = 20
 max_overflow = 10
 pool_timeout = 30
@@ -82,4 +85,4 @@ path = ["resources/app.mbank", "resources/plugins.mbank"]
 
 [production.file_system]
 type = "svfs"
-path = "resources/application.vfs"
+path = "static.svfs"

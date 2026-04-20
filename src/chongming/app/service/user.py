@@ -1,4 +1,5 @@
 from typing import Optional
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,7 @@ class UserService:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_user_by_id(user_id: int, session: AsyncSession) -> Optional[User]:
+    async def get_user_by_id(user_id: UUID, session: AsyncSession) -> Optional[User]:
         return await session.get(User, user_id)
 
     @staticmethod

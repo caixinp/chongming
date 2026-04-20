@@ -1,9 +1,10 @@
-import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlmodel import SQLModel, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.exc import OperationalError
@@ -25,6 +26,7 @@ class TaskRequest(BaseModel):
 
 config = get_config()
 logger = get_logger("app")
+
 
 try:
     env = config["default"]["env"]
@@ -70,6 +72,7 @@ async def lifespan(app: FastAPI):
                 if "already exists" in str(e):
                     raise
 
+    # 启动时：初始化任务服务
     task_service = get_task_service_instance(async_session_maker)
     app.state.task_service = task_service
     await task_service.start(init_tasks_callback)
@@ -82,9 +85,8 @@ async def lifespan(app: FastAPI):
     get_cache().close()
 
 
-cors = config[env].get("cors", {})
-
 # 创建 FastAPI 应用
+cors = config[env].get("cors", {})
 app = FastAPI(
     title=config["default"]["app"]["name"],
     version=config["default"]["app"]["version"],
@@ -94,9 +96,12 @@ app = FastAPI(
     openapi_url="/openapi.json" if config[env]["debug"] else None,
     lifespan=lifespan,
 )
+
 # 添加 CORS 中间件
 app.add_middleware(CORSMiddleware, **cors)
-app.include_router(api_router, prefix="/api/v1")
+
+# 添加路由
+app.include_router(api_router, prefix=config["default"]["prefix"])
 
 
 # 根路由
@@ -107,7 +112,7 @@ async def root():
         "message": f"欢迎使用 {config['default']['app']['name']}",
         "version": config["default"]["app"]["version"],
         "docs": "/docs" if config[env]["debug"] else None,
-        "health": "/api/v1/health",
+        "health": f"{config['default']['prefix']}/health",
     }
 
 
@@ -124,10 +129,19 @@ async def root():
 #     )
 #     return {"status": "success", "job_id": job.id}
 
+# 挂载静态文件
+config = get_config()
+IMAGE_DIR = Path(f"./{config['default']['upload_path']}/images")
+app.mount(
+    f"{config['default']['prefix']}/images",
+    StaticFiles(directory=f"./{config['default']['upload_path']}/images"),
+    name="images",
+)
 
-if os.path.exists("static.svfs"):
+# 挂载前端静态文件
+if vfs_db_path := config[env].get("file_system", {}).get("path", None):
     logger.info("静态文件已存在，将使用静态文件服务")
-    static_files_handler = SVFSStaticFiles(directory="/")
+    static_files_handler = SVFSStaticFiles(directory="/", vfs_db_path=vfs_db_path)
     app.mount("/static", static_files_handler, name="static")
 
 

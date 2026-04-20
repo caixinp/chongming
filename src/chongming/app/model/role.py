@@ -1,6 +1,7 @@
 from typing import Optional, List, TYPE_CHECKING
 
 from sqlmodel import SQLModel, Field, Relationship
+from pydantic import BaseModel
 
 from .relationship_table import UserRole, RolePermission
 
@@ -19,3 +20,8 @@ class Role(SQLModel, table=True):
     permissions: List["Permission"] = Relationship(
         back_populates="roles", link_model=RolePermission
     )
+
+
+class RoleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None

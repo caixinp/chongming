@@ -9,6 +9,7 @@ description = "基于 modules-bank 的 fastapi 打包脚手架"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
+    "aiofiles>=24.1.0",
     "aiosqlite",
     "apscheduler",
     "bcrypt==4.0.1",
@@ -17,6 +18,7 @@ dependencies = [
     "module-bank",
     "passlib[bcrypt]",
     "pyjwt",
+    "python-multipart>=0.0.20",
     "sqlite-vfs",
     "sqlmodel[aiosqlite]",
     "tomli",

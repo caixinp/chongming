@@ -1,13 +1,17 @@
-from typing import Callable, Optional
-
 from ..core.scheduler import TaskService
-from .execute_background import dev_init_admin
+from ..core.config import get_config
+from .dev_init_db import init_db
+
+
+config = get_config()
 
 
 async def init_tasks_callback(task_service: TaskService):
-    await task_service.add_date_job(
-        dev_init_admin,
-        run_date=None,
-        args=[],
-        job_id="task_name",
-    )
+    if config["default"]["env"] == "development":
+
+        await task_service.add_date_job(
+            init_db,
+            run_date=None,
+            args=[],
+            job_id="task_name",
+        )

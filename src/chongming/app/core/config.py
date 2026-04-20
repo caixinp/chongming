@@ -23,6 +23,8 @@ class DefaultApp(TypedDict):
 class Default(TypedDict):
     app: DefaultApp
     env: Literal["production", "development"]
+    prefix: str
+    upload_path: str
 
 
 class SqliteConnectionArgs(TypedDict, total=False):
@@ -86,7 +88,7 @@ class ModuleSystem(TypedDict, total=False):
 
 class FileSystem(TypedDict, total=False):
     type: str
-    path: List[str]
+    path: str
 
 
 class Env(TypedDict, total=False):

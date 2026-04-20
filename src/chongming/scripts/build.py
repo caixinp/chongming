@@ -115,6 +115,8 @@ def run_pyinstaller():
             "--hidden-import",
             "aiosqlite",
             "--hidden-import",
+            "aiofiles",
+            "--hidden-import",
             "apscheduler",
             "--hidden-import",
             "diskcache",
@@ -126,6 +128,8 @@ def run_pyinstaller():
             "passlib.handlers.bcrypt",
             "--hidden-import",
             "sqlite_vfs",
+            "--hidden-import",
+            "python_multipart",
             "--hidden-import",
             "sqlite_vfs.core",
             "--hidden-import",
@@ -154,11 +158,12 @@ def run_pyinstaller():
 
 async def init_database():
     from sqlalchemy.ext.asyncio import create_async_engine
-    from ..app.core.config import get_config
     from sqlmodel import SQLModel, text
     from sqlalchemy.exc import OperationalError
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-    from ..app.service.user import UserService
+
+    from ..app.core.config import get_config
+    from ..app.task.dev_init_db import init_permission, dev_init_admin
 
     database = get_config()["database"]
     database_type = database["type"]
@@ -187,7 +192,9 @@ async def init_database():
                 raise
     # 添加管理员用户
     async with async_session_maker() as session:
-        await UserService.create_user(session, "admin", "admin", is_superuser=True)  # type: ignore
+        # await UserService.create_user(session, "admin", "admin", is_superuser=True)  # type: ignore
+        await init_permission(session)
+        await dev_init_admin(session)
 
 
 async def main():
@@ -256,7 +263,6 @@ async def main():
     shutil.rmtree(r"build/pyarmor_runtime_000000", ignore_errors=True)
     os.remove(r"build/main.py")
     os.remove(r"build/server.py")
-    # os.remove(r"build/config.toml")
 
     print("构建完成")
 

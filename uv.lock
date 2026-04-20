@@ -8,6 +8,31 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "aiofiles"
+version = "24.1.0"
+source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }
+resolution-markers = [
+    "python_full_version < '3.9'",
+]
+sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/0b/03/a88171e277e8caa88a4c77808c20ebb04ba74cc4681bf1e9416c862de237/aiofiles-24.1.0.tar.gz", hash = "sha256:22a075c9e5a3810f0c2e48f3008c94d68c65d763b9b03857924c99e57355166c", size = 30247, upload-time = "2024-06-24T11:02:03.584Z" }
+wheels = [
+    { url = "https://mirrors.ustc.edu.cn/pypi/packages/a5/45/30bb92d442636f570cb5651bc661f52b610e2eec3f891a5dc3a4c3667db0/aiofiles-24.1.0-py3-none-any.whl", hash = "sha256:b4ec55f4195e3eb5d7abd1bf7e061763e864dd4954231fb8539a0ef8bb8260e5", size = 15896, upload-time = "2024-06-24T11:02:01.529Z" },
+]
+
+[[package]]
+name = "aiofiles"
+version = "25.1.0"
+source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }
+resolution-markers = [
+    "python_full_version >= '3.10'",
+    "python_full_version == '3.9.*'",
+]
+sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/41/c3/534eac40372d8ee36ef40df62ec129bee4fdb5ad9706e58a29be53b2c970/aiofiles-25.1.0.tar.gz", hash = "sha256:a8d728f0a29de45dc521f18f07297428d56992a742f0cd2701ba86e44d23d5b2", size = 46354, upload-time = "2025-10-09T20:51:04.358Z" }
+wheels = [
+    { url = "https://mirrors.ustc.edu.cn/pypi/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl", hash = "sha256:abe311e527c862958650f9438e859c1fa7568a141b22abcd015e120e86a85695", size = 14668, upload-time = "2025-10-09T20:51:03.174Z" },
+]
+
+[[package]]
 name = "aiosqlite"
 version = "0.20.0"
 source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }
@@ -337,6 +362,8 @@ name = "chongming"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiofiles", version = "24.1.0", source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }, marker = "python_full_version < '3.9'" },
+    { name = "aiofiles", version = "25.1.0", source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }, marker = "python_full_version >= '3.9'" },
     { name = "aiosqlite", version = "0.20.0", source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }, marker = "python_full_version < '3.9'" },
     { name = "aiosqlite", version = "0.22.1", source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }, marker = "python_full_version >= '3.9'" },
     { name = "apscheduler" },
@@ -349,6 +376,8 @@ dependencies = [
     { name = "passlib", extra = ["bcrypt"] },
     { name = "pyjwt", version = "2.9.0", source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }, marker = "python_full_version < '3.9'" },
     { name = "pyjwt", version = "2.11.0", source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }, marker = "python_full_version >= '3.9'" },
+    { name = "python-multipart", version = "0.0.20", source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }, marker = "python_full_version < '3.10'" },
+    { name = "python-multipart", version = "0.0.26", source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }, marker = "python_full_version >= '3.10'" },
     { name = "sqlite-vfs" },
     { name = "sqlmodel", version = "0.0.29", source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }, marker = "python_full_version < '3.9'" },
     { name = "sqlmodel", version = "0.0.34", source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }, marker = "python_full_version == '3.9.*'" },
@@ -370,6 +399,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiofiles", specifier = ">=24.1.0" },
     { name = "aiosqlite" },
     { name = "apscheduler" },
     { name = "bcrypt", specifier = "==4.0.1" },
@@ -378,6 +408,7 @@ requires-dist = [
     { name = "module-bank" },
     { name = "passlib", extras = ["bcrypt"] },
     { name = "pyjwt" },
+    { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "sqlite-vfs" },
     { name = "sqlmodel", extras = ["aiosqlite"] },
     { name = "tomli" },
@@ -1332,6 +1363,31 @@ resolution-markers = [
 sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/5c/5a/b46fa56bf322901eee5b0454a34343cdbdae202cd421775a8ee4e42fd519/pyjwt-2.11.0.tar.gz", hash = "sha256:35f95c1f0fbe5d5ba6e43f00271c275f7a1a4db1dab27bf708073b75318ea623", size = 98019, upload-time = "2026-01-30T19:59:55.694Z" }
 wheels = [
     { url = "https://mirrors.ustc.edu.cn/pypi/packages/6f/01/c26ce75ba460d5cd503da9e13b21a33804d38c2165dec7b716d06b13010c/pyjwt-2.11.0-py3-none-any.whl", hash = "sha256:94a6bde30eb5c8e04fee991062b534071fd1439ef58d2adc9ccb823e7bcd0469", size = 28224, upload-time = "2026-01-30T19:59:54.539Z" },
+]
+
+[[package]]
+name = "python-multipart"
+version = "0.0.20"
+source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }
+resolution-markers = [
+    "python_full_version == '3.9.*'",
+    "python_full_version < '3.9'",
+]
+sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/f3/87/f44d7c9f274c7ee665a29b885ec97089ec5dc034c7f3fafa03da9e39a09e/python_multipart-0.0.20.tar.gz", hash = "sha256:8dd0cab45b8e23064ae09147625994d090fa46f5b0d1e13af944c331a7fa9d13", size = 37158, upload-time = "2024-12-16T19:45:46.972Z" }
+wheels = [
+    { url = "https://mirrors.ustc.edu.cn/pypi/packages/45/58/38b5afbc1a800eeea951b9285d3912613f2603bdf897a4ab0f4bd7f405fc/python_multipart-0.0.20-py3-none-any.whl", hash = "sha256:8a62d3a8335e06589fe01f2a3e178cdcc632f3fbe0d492ad9ee0ec35aab1f104", size = 24546, upload-time = "2024-12-16T19:45:44.423Z" },
+]
+
+[[package]]
+name = "python-multipart"
+version = "0.0.26"
+source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }
+resolution-markers = [
+    "python_full_version >= '3.10'",
+]
+sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/88/71/b145a380824a960ebd60e1014256dbb7d2253f2316ff2d73dfd8928ec2c3/python_multipart-0.0.26.tar.gz", hash = "sha256:08fadc45918cd615e26846437f50c5d6d23304da32c341f289a617127b081f17", size = 43501, upload-time = "2026-04-10T14:09:59.473Z" }
+wheels = [
+    { url = "https://mirrors.ustc.edu.cn/pypi/packages/9a/22/f1925cdda983ab66fc8ec6ec8014b959262747e58bdca26a4e3d1da29d56/python_multipart-0.0.26-py3-none-any.whl", hash = "sha256:c0b169f8c4484c13b0dcf2ef0ec3a4adb255c4b7d18d8e420477d2b1dd03f185", size = 28847, upload-time = "2026-04-10T14:09:58.131Z" },
 ]
 
 [[package]]
