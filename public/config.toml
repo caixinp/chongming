@@ -67,6 +67,7 @@ port = 8000
 reload = false
 workers = 4
 access_log = false 
+timeout_keep_alive = 65
 
 [production.logging]
 level = "INFO"
