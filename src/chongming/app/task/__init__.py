@@ -1,6 +1,7 @@
-from ..core.scheduler import TaskService
 from ..core.config import get_config
 from .dev_init_db import init_db
+
+from plugins.scheduler.scheduler import TaskService
 
 
 config = get_config()

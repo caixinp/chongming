@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from ..service.auth import get_auth_service
-from ..core.jwt_cache import TokenData
+from plugins.jwt.jwt_cache import TokenData
 
 
 access_scheme = HTTPBearer(scheme_name="AccessToken")

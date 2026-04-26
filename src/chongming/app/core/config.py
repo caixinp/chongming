@@ -64,6 +64,7 @@ class Server(TypedDict, total=False):
     port: Required[int]
     reload: bool
     workers: int
+    access_log: bool
 
 
 class Logging(TypedDict):

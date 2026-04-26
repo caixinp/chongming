@@ -54,7 +54,7 @@ def app_run(app_config: dict, default_config: dict):
         reload=reload,
         workers=workers,
         log_level="debug" if app_config.get("debug", False) else "info",
-        access_log=True,
+        access_log=False,
         timeout_keep_alive=timeout_keep_alive,
     )
 

@@ -250,6 +250,13 @@ async def main():
         with open("./build/utils/launch.py", "w", encoding="utf-8") as f:
             f.write(context)
 
+    jwt_key = Encryption.generate_key()
+    with open("./build/config.toml", "r", encoding="utf-8") as f:
+        context = f.read()
+        context = context.replace("your-secret-key-change-in-production", jwt_key)
+        with open("build/config.toml", "w", encoding="utf-8") as f:
+            f.write(context)
+
     # 混淆
     run_pyarmor_obfuscate()
 

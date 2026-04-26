@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -8,23 +9,19 @@ from fastapi.staticfiles import StaticFiles
 from sqlmodel import SQLModel, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.exc import OperationalError
-from pydantic import BaseModel
 
 from .core.config import get_config
 from .core.cache import get_cache
 from .core.logger import get_logger
-from .core.scheduler import get_task_service_instance
 from .core.static_files import SVFSStaticFiles
 from .api import api_router
 from .task import init_tasks_callback
 
-
-class TaskRequest(BaseModel):
-    task_name: str
-    interval: int
+from plugins.scheduler.scheduler import get_task_service_instance
 
 
 config = get_config()
+cache = get_cache()
 logger = get_logger("app")
 
 
@@ -38,6 +35,9 @@ except KeyError:  # pragma: no cover
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from plugins import hello
+    from plugins.jwt.jwt_cache import get_jwt_cache
+
+    get_jwt_cache(config, cache)
 
     hello()
     database = config["database"]
@@ -73,7 +73,9 @@ async def lifespan(app: FastAPI):
                     raise
 
     # 启动时：初始化任务服务
-    task_service = get_task_service_instance(async_session_maker)
+    task_service = get_task_service_instance(
+        config, get_logger("scheduler"), async_session_maker
+    )
     app.state.task_service = task_service
     await task_service.start(init_tasks_callback)
 
@@ -82,7 +84,7 @@ async def lifespan(app: FastAPI):
     # 关闭时：释放引擎
     await task_service.shutdown(wait=True)
     await engine.dispose()
-    get_cache().close()
+    cache.close()
 
 
 # 创建 FastAPI 应用
@@ -104,6 +106,21 @@ app.add_middleware(CORSMiddleware, **cors)
 app.include_router(api_router, prefix=config["default"]["prefix"])
 
 
+@app.middleware("http")
+async def access_log_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration = (time.perf_counter() - start) * 1000
+    client = request.client.host if request.client else "-"
+
+    logger.info(
+        f"{request.method} {request.url.path} status={response.status_code} "
+        f"duration={duration:.2f}ms client={client}",
+        extra={"status_code": response.status_code},  # ← 关键
+    )
+    return response
+
+
 # 根路由
 @app.get("/", summary="根路径")
 async def root():
@@ -114,6 +131,14 @@ async def root():
         "docs": "/docs" if config[env]["debug"] else None,
         "health": f"{config['default']['prefix']}/health",
     }
+
+
+# from pydantic import BaseModel
+
+
+# class TaskRequest(BaseModel):
+#     task_name: str
+#     interval: int
 
 
 # @app.post("/schedule")

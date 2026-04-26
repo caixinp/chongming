@@ -1,8 +1,12 @@
-from ..core.scheduler import logger
-from ..core.scheduler import get_task_service_instance
+from ..core.logger import get_logger
 from ..core.constant import PermissionConstant
 from ..service.user import UserService
 from ..service.permission import PermissionService
+
+from plugins.scheduler.scheduler import get_task_service_instance
+
+
+logger = get_logger("scheduler")
 
 
 async def dev_init_admin(session):

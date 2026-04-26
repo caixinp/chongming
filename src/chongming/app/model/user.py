@@ -1,4 +1,4 @@
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List, Dict, TYPE_CHECKING
 
 from sqlmodel import SQLModel, Field, Relationship
 from pydantic import BaseModel
@@ -42,3 +42,14 @@ class UserRead(UserBase):
 class UserLogin(BaseModel):
     email: str
     password: str
+
+
+class Userlogout(BaseModel):
+    code: int = 200
+    message: str = "logout success"
+
+
+class UserSession(BaseModel):
+    user_id: str
+    sessions: List[Dict[str, Optional[str]]]
+    count: int

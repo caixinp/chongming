@@ -8,9 +8,10 @@ from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..model.user import User
-from ..core.jwt_cache import get_jwt_cache, TokenResponse, TokenData
 from ..core.config import get_config
 from .user import UserService
+
+from plugins.jwt.jwt_cache import get_jwt_cache, TokenResponse, TokenData
 
 
 class AuthService:
