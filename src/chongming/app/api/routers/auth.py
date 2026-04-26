@@ -30,6 +30,21 @@ async def register(
     user_data: UserCreate,
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    用户注册接口
+
+    创建新用户账户，检查邮箱是否已被注册，如果邮箱未被注册则创建新用户。
+
+    Args:
+        user_data: 用户注册数据，包含邮箱、密码、用户名和全名等信息
+        session: 数据库会话对象，用于执行数据库操作
+
+    Returns:
+        UserRead: 创建成功的用户信息，包含用户ID、邮箱、用户名等字段
+
+    Raises:
+        HTTPException: 当邮箱已被注册时抛出400错误
+    """
     existing = await UserService.get_user_by_email(user_data.email, session)
     if existing:
         raise HTTPException(
@@ -63,6 +78,25 @@ async def login(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    用户登录接口
+
+    验证用户凭据并生成访问令牌和刷新令牌。依次检查邮箱是否存在、密码是否正确、用户是否被禁用。
+
+    Args:
+        user_data: 用户登录数据，包含邮箱和密码
+        request: FastAPI请求对象，用于获取客户端信息
+        session: 数据库会话对象，用于查询用户信息
+
+    Returns:
+        TokenResponse: 包含访问令牌(access_token)、刷新令牌(refresh_token)和令牌类型(token_type)的响应对象
+
+    Raises:
+        HTTPException:
+            - 400错误：当邮箱不存在时
+            - 401错误：当密码错误时
+            - 402错误：当用户账户被禁用时
+    """
     user = await UserService.get_user_by_email(user_data.email, session)
     if not user:
         raise HTTPException(
@@ -93,6 +127,22 @@ async def refresh_token(
     credentials: HTTPAuthorizationCredentials = Depends(refresh_scheme),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    刷新访问令牌接口
+
+    使用有效的刷新令牌获取新的访问令牌。验证刷新令牌的有效性，如果有效则生成新的访问令牌。
+
+    Args:
+        request: FastAPI请求对象，用于获取客户端信息
+        credentials: HTTP认证凭证，从请求头中提取的刷新令牌
+        session: 数据库会话对象，用于验证令牌状态
+
+    Returns:
+        RefreshTokenResponse: 包含新的访问令牌(access_token)和令牌类型(token_type)的响应对象
+
+    Raises:
+        HTTPException: 当刷新令牌无效或已过期时抛出401错误
+    """
     auth_service = get_auth_service()
 
     refresh_token = credentials.credentials
@@ -112,6 +162,17 @@ async def refresh_token(
 async def logout(
     credentials: HTTPAuthorizationCredentials = Depends(access_scheme),
 ):
+    """
+    用户登出接口
+
+    使当前的访问令牌失效，实现单设备登出功能。
+
+    Args:
+        credentials: HTTP认证凭证，从请求头中提取的访问令牌
+
+    Returns:
+        Userlogout: 登出成功响应，包含成功消息和状态码200
+    """
     auth_service = get_auth_service()
     token = credentials.credentials
     await auth_service.logout(token)
@@ -120,6 +181,17 @@ async def logout(
 
 @router.post("/logout-all", summary="登出所有设备", response_model=Userlogout)
 async def logout_all(current_user: TokenData = Depends(get_current_user)):
+    """
+    登出所有设备接口
+
+    使指定用户的所有活跃会话令牌失效，实现多设备同时登出功能。
+
+    Args:
+        current_user: 当前登录用户的令牌数据，包含用户ID等信息
+
+    Returns:
+        Userlogout: 登出成功响应，包含成功消息和状态码200
+    """
     auth_service = get_auth_service()
     await auth_service.logout_all(current_user.user_id)
 
@@ -128,7 +200,17 @@ async def logout_all(current_user: TokenData = Depends(get_current_user)):
 
 @router.get("/sessions", summary="获取用户会话")
 async def get_sessions(current_user: TokenData = Depends(get_current_user)):
-    """获取用户的所有活跃会话"""
+    """
+    获取用户会话列表接口
+
+    查询并返回指定用户的所有活跃会话信息，包括每个会话的设备信息和创建时间等。
+
+    Args:
+        current_user: 当前登录用户的令牌数据，包含用户ID等信息
+
+    Returns:
+        UserSession: 用户会话信息对象，包含用户ID、会话列表和会话总数
+    """
     auth_service = get_auth_service()
     sessions = await auth_service.get_user_sessions(current_user.user_id)
 
@@ -147,7 +229,21 @@ async def get_current_user_info(
     session: AsyncSession = Depends(get_session),
     current_user: TokenData = Depends(get_current_user),
 ):
-    """获取当前登录用户的信息"""
+    """
+    获取当前用户信息接口
+
+    根据当前登录用户的令牌信息，从数据库中查询并返回完整的用户资料。
+
+    Args:
+        session: 数据库会话对象，用于查询用户信息
+        current_user: 当前登录用户的令牌数据，包含用户ID等信息
+
+    Returns:
+        UserRead: 用户详细信息，包含用户ID、邮箱、用户名、全名、激活状态等字段
+
+    Raises:
+        HTTPException: 当用户不存在时抛出404错误
+    """
     user = await UserService.get_user_by_id(UUID(current_user.user_id), session)
     if not user:
         raise HTTPException(

@@ -26,6 +26,7 @@ class TokenCacheData:
     token_type: str = "access"  # access 或 refresh
 
     def __post_init__(self):
+        """初始化后处理，设置默认时间戳"""
         if self.created_at is None:
             self.created_at = datetime.utcnow().isoformat()
         if self.last_used is None:
@@ -33,9 +34,19 @@ class TokenCacheData:
 
 
 class JWTCache:
-    """JWT Token 缓存管理器"""
+    """JWT Token 缓存管理器
+
+    负责 JWT Token 的创建、验证、失效和会话管理。
+    使用 Redis 缓存存储 Token 哈希和用户会话索引，支持多设备登录和会话限制。
+    """
 
     def __init__(self, config, cache):
+        """初始化 JWT 缓存管理器
+
+        Args:
+            config: 配置字典，包含 security 相关配置项
+            cache: 缓存实例，提供 get/set/delete/exists/keys 等方法
+        """
         self.config = config
 
         self.lock = threading.RLock()
@@ -46,7 +57,14 @@ class JWTCache:
         self.algorithm = self.config["security"]["algorithm"]
 
     def _json_encode(self, obj):
-        """自定义 JSON 编码器，处理 datetime 对象"""
+        """自定义 JSON 编码器，处理 datetime 对象
+
+        Args:
+            obj: 需要序列化的对象
+
+        Returns:
+            JSON 字符串
+        """
 
         def convert_datetime(o):
             if isinstance(o, datetime):
@@ -58,11 +76,25 @@ class JWTCache:
         return json.dumps(obj, default=convert_datetime)
 
     def _json_decode(self, s):
-        """自定义 JSON 解码器"""
+        """自定义 JSON 解码器
+
+        Args:
+            s: JSON 字符串
+
+        Returns:
+            解码后的 Python 对象
+        """
         return json.loads(s)
 
     def _hash_token(self, token: str) -> str:
-        """Token 哈希化（避免存储明文 Token）"""
+        """Token 哈希化（避免存储明文 Token）
+
+        Args:
+            token: 原始 JWT Token 字符串
+
+        Returns:
+            SHA256 哈希值（十六进制字符串）
+        """
         return hashlib.sha256(token.encode()).hexdigest()
 
     def create_token(
@@ -74,16 +106,18 @@ class JWTCache:
         user_agent: Optional[str] = None,
         ip_address: Optional[str] = None,
     ) -> str:
-        """
-        创建并缓存 JWT Token
+        """创建并缓存 JWT Token
+
+        生成新的 JWT Token，将其哈希值和元数据存储到缓存中，
+        并更新用户会话索引。如果超出会话限制，会自动清理最早的会话。
 
         Args:
             user_id: 用户ID
-            user_data: 用户数据
+            user_data: 用户数据，将嵌入到 Token payload 中
             token_type: Token 类型（access 或 refresh）
-            device_id: 设备ID
-            user_agent: 用户代理
-            ip_address: IP地址
+            device_id: 设备ID，用于标识登录设备
+            user_agent: 用户代理字符串，记录客户端信息
+            ip_address: IP地址，记录登录来源
 
         Returns:
             JWT Token 字符串
@@ -140,7 +174,11 @@ class JWTCache:
             return token
 
     def _generate_jti(self) -> str:
-        """生成唯一的 JWT ID"""
+        """生成唯一的 JWT ID
+
+        Returns:
+            UUID v4 字符串，用作 Token 的唯一标识符
+        """
         import uuid
 
         return str(uuid.uuid4())
@@ -148,7 +186,16 @@ class JWTCache:
     def _update_user_session_index(
         self, user_id: str, token_hash: str, token_type: str
     ):
-        """更新用户会话索引"""
+        """更新用户会话索引
+
+        维护每个用户每种 Token 类型的会话列表，限制最大数量为 100。
+        当超过限制时，保留最新的 100 个会话。
+
+        Args:
+            user_id: 用户ID
+            token_hash: Token 的 SHA256 哈希值
+            token_type: Token 类型（access 或 refresh）
+        """
         with self.lock:
             key = f"user:{user_id}:{token_type}"
             user_tokens = self.cache.get(key, [])
@@ -164,7 +211,14 @@ class JWTCache:
             self.cache.set(key, user_tokens)
 
     def _enforce_session_limit(self, user_id: str):
-        """强制用户会话限制"""
+        """强制用户会话限制
+
+        检查用户的 access 和 refresh token 数量，如果超过配置的最大会话数，
+        则删除最早的会话以维持限制。
+
+        Args:
+            user_id: 用户ID
+        """
         max_sessions = self.config["security"]["max_sessions_per_user"]
 
         access_key = f"user:{user_id}:access"
@@ -195,15 +249,22 @@ class JWTCache:
     def validate_token(
         self, token: str, token_type: str = "access"
     ) -> Optional[Dict[str, Any]]:
-        """
-        验证 JWT Token
+        """验证 JWT Token
+
+        执行多层验证：JWT 签名验证、类型检查、缓存存在性检查、
+        活跃状态检查和过期时间检查。验证成功后更新最后使用时间。
 
         Args:
-            token: JWT Token
-            token_type: 期望的 Token 类型
+            token: JWT Token 字符串
+            token_type: 期望的 Token 类型（access 或 refresh）
 
         Returns:
-            验证成功返回用户数据，失败返回 None
+            验证成功返回包含用户信息的字典，包含以下字段：
+            - user_id: 用户ID
+            - device_id: 设备ID
+            - payload: JWT payload 数据
+            - cache_data: 缓存中的完整会话数据
+            验证失败返回 None
         """
         try:
             # 解码验证 Token
@@ -259,7 +320,14 @@ class JWTCache:
             return None
 
     def invalidate_token(self, token: str):
-        """使单个 Token 失效"""
+        """使单个 Token 失效
+
+        通过标记缓存中的 Token 为非活跃状态来实现失效，
+        而不是直接删除，以便保留审计信息。
+
+        Args:
+            token: 需要失效的 JWT Token 字符串
+        """
         with self.lock:
             token_hash = self._hash_token(token)
 
@@ -270,7 +338,16 @@ class JWTCache:
                 self.cache.set(f"token:{token_hash}", cache_data)
 
     def invalidate_user_tokens(self, user_id: str, token_type: Optional[str] = None):
-        """使用户的所有 Token 失效"""
+        """使用户的所有 Token 失效
+
+        批量失效指定用户的所有 Token，可用于用户登出、密码修改等场景。
+        可以指定失效特定类型的 Token，或者同时失效 access 和 refresh token。
+
+        Args:
+            user_id: 用户ID
+            token_type: 可选，指定要失效的 Token 类型（access 或 refresh）。
+                       如果不指定，则失效该用户的所有类型 Token
+        """
         with self.lock:
             if token_type:
                 keys = [f"user:{user_id}:{token_type}"]
@@ -292,7 +369,24 @@ class JWTCache:
                 self.cache.set(key, [])
 
     def get_user_sessions(self, user_id: str) -> List[Dict[str, Any]]:
-        """获取用户的所有活跃会话"""
+        """获取用户的所有活跃会话
+
+        遍历用户的所有 Token 会话，过滤出当前活跃且未过期的会话，
+        返回包含设备信息、时间戳等详细信息的会话列表。
+
+        Args:
+            user_id: 用户ID
+
+        Returns:
+            活跃会话列表，每个会话包含以下字段：
+            - token_type: Token 类型
+            - device_id: 设备ID
+            - user_agent: 用户代理
+            - ip_address: IP地址
+            - created_at: 创建时间
+            - last_used: 最后使用时间
+            - expires_at: 过期时间
+        """
         with self.lock:
             sessions = []
 
@@ -325,7 +419,14 @@ class JWTCache:
             return sessions
 
     def cleanup_expired(self):
-        """清理过期数据"""
+        """清理过期数据
+
+        扫描所有 Token 缓存，删除已过期的 Token 记录。
+        建议定期调用此方法以释放缓存空间。
+
+        Returns:
+            清理的过期 Token 数量
+        """
         with self.lock:
             cleaned_count = 0
             current_time = datetime.utcnow()
@@ -345,7 +446,21 @@ _jwt_cache = None
 
 
 def get_jwt_cache(config=None, cache=None) -> JWTCache:
-    """获取 JWT 缓存实例（单例模式）"""
+    """获取 JWT 缓存实例（单例模式）
+
+    确保整个应用中只有一个 JWTCache 实例，避免重复初始化和资源浪费。
+    首次调用时必须提供 config 和 cache 参数。
+
+    Args:
+        config: 配置字典，仅在首次初始化时需要
+        cache: 缓存实例，仅在首次初始化时需要
+
+    Returns:
+        JWTCache 单例实例
+
+    Raises:
+        ValueError: 首次调用时如果 config 或 cache 为空则抛出异常
+    """
     global _jwt_cache
     if _jwt_cache is None:
         if config is None or cache is None:
@@ -356,7 +471,10 @@ def get_jwt_cache(config=None, cache=None) -> JWTCache:
 
 # Token 响应模型
 class TokenResponse(BaseModel):
-    """Token 响应模型"""
+    """Token 响应模型
+
+    用于登录接口返回 access token 和 refresh token
+    """
 
     access_token: str
     refresh_token: str
@@ -366,7 +484,10 @@ class TokenResponse(BaseModel):
 
 
 class RefreshTokenResponse(BaseModel):
-    """刷新 Token 响应模型"""
+    """刷新 Token 响应模型
+
+    用于刷新 token 接口，仅返回新的 access token
+    """
 
     access_token: str
     token_type: str = "bearer"
@@ -374,7 +495,10 @@ class RefreshTokenResponse(BaseModel):
 
 # Token 数据模型
 class TokenData(BaseModel):
-    """Token 数据模型"""
+    """Token 数据模型
+
+    用于从 Token 中提取的用户身份信息
+    """
 
     user_id: str
     username: Optional[str] = None

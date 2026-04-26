@@ -31,9 +31,28 @@ except KeyError:  # pragma: no cover
     raise ValueError("配置不存在")
 
 
-# 生命周期管理
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    应用生命周期管理函数，负责应用的启动和关闭时的资源初始化与清理。
+
+    在应用启动时：
+    - 初始化JWT缓存
+    - 创建异步数据库引擎和会话工厂
+    - 在开发环境下创建数据库表
+    - 初始化定时任务服务
+
+    在应用关闭时：
+    - 关闭定时任务服务
+    - 释放数据库引擎资源
+    - 关闭缓存连接
+
+    参数:
+        app: FastAPI应用实例
+
+    Yields:
+        None: 应用运行期间保持上下文激活
+    """
     from plugins import hello
     from plugins.jwt.jwt_cache import get_jwt_cache
 
@@ -46,17 +65,14 @@ async def lifespan(app: FastAPI):
     if database_config is None:
         raise ValueError("配置不存在")
 
-    # 启动时：创建引擎和会话工厂，初始化数据库表
     engine = create_async_engine(database["url"], **database_config)
     async_session_maker = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )
 
-    # 将资源存储到 app.state
     app.state.engine = engine
     app.state.async_session_maker = async_session_maker
 
-    # 创建表（异步方式）
     if env == "development":
         async with engine.begin() as conn:
             if database_type == "sqlite":
@@ -72,22 +88,19 @@ async def lifespan(app: FastAPI):
                 if "already exists" in str(e):
                     raise
 
-    # 启动时：初始化任务服务
     task_service = get_task_service_instance(
         config, get_logger("scheduler"), async_session_maker
     )
     app.state.task_service = task_service
     await task_service.start(init_tasks_callback)
 
-    yield  # 应用运行期间
+    yield
 
-    # 关闭时：释放引擎
     await task_service.shutdown(wait=True)
     await engine.dispose()
     cache.close()
 
 
-# 创建 FastAPI 应用
 cors = config[env].get("cors", {})
 app = FastAPI(
     title=config["default"]["app"]["name"],
@@ -99,15 +112,29 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# 添加 CORS 中间件
 app.add_middleware(CORSMiddleware, **cors)
 
-# 添加路由
 app.include_router(api_router, prefix=config["default"]["prefix"])
 
 
 @app.middleware("http")
 async def access_log_middleware(request: Request, call_next):
+    """
+    HTTP访问日志中间件，记录每个请求的详细信息。
+
+    记录的信息包括：
+    - 请求方法和路径
+    - 响应状态码
+    - 请求处理时长（毫秒）
+    - 客户端IP地址
+
+    参数:
+        request: FastAPI请求对象
+        call_next: 下一个中间件或路由处理函数
+
+    返回:
+        Response: 处理后的响应对象
+    """
     start = time.perf_counter()
     response = await call_next(request)
     duration = (time.perf_counter() - start) * 1000
@@ -116,15 +143,19 @@ async def access_log_middleware(request: Request, call_next):
     logger.info(
         f"{request.method} {request.url.path} status={response.status_code} "
         f"duration={duration:.2f}ms client={client}",
-        extra={"status_code": response.status_code},  # ← 关键
+        extra={"status_code": response.status_code},
     )
     return response
 
 
-# 根路由
 @app.get("/", summary="根路径")
 async def root():
-    """根路径，返回应用信息"""
+    """
+    根路径端点，返回应用的基本信息。
+
+    返回:
+        dict: 包含应用名称、版本、文档地址和健康检查地址的字典
+    """
     return {
         "message": f"欢迎使用 {config['default']['app']['name']}",
         "version": config["default"]["app"]["version"],
@@ -154,7 +185,6 @@ async def root():
 #     )
 #     return {"status": "success", "job_id": job.id}
 
-# 挂载静态文件
 config = get_config()
 IMAGE_DIR = Path(f"./{config['default']['upload_path']}/images")
 app.mount(
@@ -163,17 +193,26 @@ app.mount(
     name="images",
 )
 
-# 挂载前端静态文件
 if vfs_db_path := config[env].get("file_system", {}).get("path", None):
     logger.info("静态文件已存在，将使用静态文件服务")
     static_files_handler = SVFSStaticFiles(directory="/", vfs_db_path=vfs_db_path)
     app.mount("/static", static_files_handler, name="static")
 
 
-# 全局异常处理器
 @app.exception_handler(Exception)
 async def global_exception_handler(_: Request, exc: Exception):
-    """全局异常处理器"""
+    """
+    全局异常处理器，捕获并处理应用中未捕获的异常。
+
+    在调试模式下返回详细的异常信息，在生产模式下返回通用错误提示。
+
+    参数:
+        _: FastAPI请求对象（未使用）
+        exc: 捕获到的异常对象
+
+    返回:
+        JSONResponse: 包含错误信息的JSON响应，状态码为500
+    """
     logger.error(f"全局异常: {exc}")
     return JSONResponse(
         status_code=500,

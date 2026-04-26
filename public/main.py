@@ -12,13 +12,17 @@ import server
 
 use_shell = platform.system() == "Windows"
 
+
 def app_run(app_config: dict, default_config: dict):
     """
     应用运行函数 - 适配模块银行环境
 
     Args:
-        app_config: 应用配置
-        default_config: 默认配置
+        app_config: 应用配置字典，包含服务器配置、环境设置等
+        default_config: 默认配置字典，包含应用名称、版本等基础信息
+
+    Returns:
+        None: 此函数不返回值，直接启动服务器并阻塞运行
     """
     from app.core.logger import get_logger  # type: ignore
 
@@ -48,8 +52,10 @@ def app_run(app_config: dict, default_config: dict):
     logger.info(f"👥 Workers: {workers}")
     logger.info("=" * 50)
 
+    # 根据操作系统选择不同的服务器启动方式
     if use_shell:
         import uvicorn
+
         uvicorn.run(
             "server:app",
             host=host,
@@ -62,16 +68,27 @@ def app_run(app_config: dict, default_config: dict):
         )
     else:
         from gunicorn.app.wsgiapp import run
+
         sys.argv = [
             "gunicorn",
             "server:app",
-            "-k", "uvicorn.workers.UvicornWorker",
-            "-w", str(workers),
-            "-b", f"{host}:{port}"
+            "-k",
+            "uvicorn.workers.UvicornWorker",
+            "-w",
+            str(workers),
+            "-b",
+            f"{host}:{port}",
         ]
         run()
 
+
 def main():
+    """
+    主函数入口 - 初始化多进程支持并启动应用
+
+    Returns:
+        None: 此函数不返回值，调用launch函数启动应用
+    """
     freeze_support()
     launch(app_run, "production")
 
