@@ -4,7 +4,7 @@
 
 from typing import Optional
 from fastapi import Request
-from passlib.context import CryptContext
+import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..model.user import User
@@ -20,7 +20,6 @@ class AuthService:
     def __init__(self):
         self.jwt_cache = get_jwt_cache()
         self.settings = get_config()
-        self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
     async def authenticate_user(
         self, email: str, password: str, session: AsyncSession
@@ -29,7 +28,10 @@ class AuthService:
         user = await UserService.get_user_by_email(email, session)
         if not user:
             return None
-        if not self.pwd_context.verify(password, user.hashed_password):
+        if not bcrypt.checkpw(
+            password.encode('utf-8'),
+            user.hashed_password.encode('utf-8')
+        ):
             return None
 
         return user

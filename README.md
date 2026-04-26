@@ -66,12 +66,12 @@ docker build -t chongming:latest .
 
 导出镜像
 ```shell
-docker save -o chongming_v1.0.tar chongming:v1.0
+docker save -o chongming_latest.tar chongming:latest
 ```
 
 导入镜像
 ```shell
-docker load -i chongming_v1.0.tar
+docker load -i chongming_latest.tar
 ```
 
 运行镜像
@@ -80,5 +80,5 @@ mkdir -p /data/chongming
 docker run -d -p 8000:8000 \
     -v /data/chongming/database.db:/app/database.db \
     -v /data/chongming/uploads:/app/uploads \
-    --name chongming chongming:v1.0
+    --name chongming chongming:latest
 ```

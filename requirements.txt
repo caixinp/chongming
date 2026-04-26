@@ -1,12 +1,14 @@
+aiofiles
 aiosqlite
 apscheduler
-bcrypt==4.0.1
+bcrypt
+diskcache
 fastapi[uvicorn]
+gunicorn
 module-bank
-passlib[bcrypt]
 pyjwt
+python-multipart
 sqlite-vfs
-sqlitedict
 sqlmodel[aiosqlite]
 tomli
 typing-extensions
