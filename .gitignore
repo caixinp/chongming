@@ -13,3 +13,6 @@ resources/
 output.md
 *.db
 *.svfs
+
+# resources
+uploads/
