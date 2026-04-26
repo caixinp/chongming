@@ -5,10 +5,12 @@ FastAPI chongming 示例
 主入口文件，适配 chongming 打包系统
 """
 import sys
+import platform
 from utils.launch import launch
 from multiprocessing import freeze_support
 import server
 
+use_shell = platform.system() == "Windows"
 
 def app_run(app_config: dict, default_config: dict):
     """
@@ -18,7 +20,6 @@ def app_run(app_config: dict, default_config: dict):
         app_config: 应用配置
         default_config: 默认配置
     """
-    import uvicorn
     from app.core.logger import get_logger  # type: ignore
 
     logger = get_logger("app")
@@ -47,17 +48,28 @@ def app_run(app_config: dict, default_config: dict):
     logger.info(f"👥 Workers: {workers}")
     logger.info("=" * 50)
 
-    uvicorn.run(
-        "server:app",
-        host=host,
-        port=port,
-        reload=reload,
-        workers=workers,
-        log_level="debug" if app_config.get("debug", False) else "info",
-        access_log=False,
-        timeout_keep_alive=timeout_keep_alive,
-    )
-
+    if use_shell:
+        import uvicorn
+        uvicorn.run(
+            "server:app",
+            host=host,
+            port=port,
+            reload=reload,
+            workers=workers,
+            log_level="debug" if app_config.get("debug", False) else "info",
+            access_log=False,
+            timeout_keep_alive=timeout_keep_alive,
+        )
+    else:
+        from gunicorn.app.wsgiapp import run
+        sys.argv = [
+            "gunicorn",
+            "server:app",
+            "-k", "uvicorn.workers.UvicornWorker",
+            "-w", str(workers),
+            "-b", f"{host}:{port}"
+        ]
+        run()
 
 def main():
     freeze_support()

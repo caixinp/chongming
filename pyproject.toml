@@ -48,3 +48,5 @@ packages = ["src/chongming"]
 [project.scripts]
 build = "chongming.scripts.build:build"
 serve = "chongming:serve"
+# gunicorn = "gunicorn chongming.app:app -k uvicorn.workers.UvicornWorker -w 4 -b 0.0.0.0:8000"
+gunicorn = "chongming:gunicorn_serve"

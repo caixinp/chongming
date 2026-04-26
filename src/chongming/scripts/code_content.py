@@ -22,6 +22,7 @@ def generate_markdown_from_py_files(directory, output_file):
                     or file.endswith(".ts")
                     or file.endswith(".json")
                     or file.endswith(".html")
+                    or file == "dockerfile"
                 ):
                     file_path = os.path.join(root, file)
                     if file == "output.md" or file == "package-lock.json":

@@ -1,3 +1,5 @@
+import platform
+
 from module_bank import PythonToSQLite
 from module_bank.encryption import Encryption
 import os
@@ -9,6 +11,8 @@ import asyncio
 from sqlite_vfs.core import SQLiteVFS
 from sqlite_vfs.folder_packer import FolderPacker
 
+
+is_windows = platform.system() == "Windows"
 
 def build_vue_web():
     """打包 Vue Web"""
@@ -26,26 +30,37 @@ def build_vue_web():
         cwd="./src/chongming-web",
         capture_output=True,
         text=True,
-        shell=True,
+        shell=is_windows,
         encoding="utf-8",
         errors="replace",
     )
     if result.returncode != 0:
         print("打包 Vue Web 失败")
-        print(result.stderr)
+        print("标准输出:", result.stdout)
+        print("错误输出:", result.stderr)
+        return
     else:
-        vfs = SQLiteVFS(output_db, compress=False)
-        packer = FolderPacker(
-            sqlite_vfs=vfs,
-            exclude_patterns=[],
-            fs_name=fs_name,
-        )
+        print("Vue Web 打包成功")
+        if result.stdout:
+            print(result.stdout)
+    
+    # 检查 dist 目录是否存在
+    if not os.path.exists(dist_dir):
+        print(f"错误: dist 目录不存在: {dist_dir}")
+        return
+    
+    vfs = SQLiteVFS(output_db, compress=False)
+    packer = FolderPacker(
+        sqlite_vfs=vfs,
+        exclude_patterns=[],
+        fs_name=fs_name,
+    )
 
-        try:
-            packer.pack_folder(dist_dir)
-            print(f"✅ 打包完成，文件保存为 {output_db}")
-        finally:
-            vfs.close()
+    try:
+        packer.pack_folder(dist_dir)
+        print(f"✅ 打包完成，文件保存为 {output_db}")
+    finally:
+        vfs.close()
 
 
 def run_pyarmor_obfuscate():
@@ -77,68 +92,139 @@ def run_pyinstaller():
     """运行 PyInstaller 打包成可执行文件"""
     try:
         # 构建 PyInstaller 命令
-        cmd = [
-            sys.executable,
-            "-m",
-            "PyInstaller",
-            "--onefile",
-            "--name",
-            "chongming",
-            "--distpath",
-            ".",
-            "--workpath",
-            "./build_temp",
-            "--specpath",
-            "./specs",
-            "--clean",
-            # 隐藏导入
-            "--hidden-import",
-            "utils",
-            "--hidden-import",
-            "utils.launch",
-            "--hidden-import",
-            "utils.config",
-            "--hidden-import",
-            "server",
-            "--hidden-import",
-            "module_bank",
-            "--hidden-import",
-            "fastapi",
-            "--hidden-import",
-            "fastapi.staticfiles",
-            "--hidden-import",
-            "fastapi.middleware.cors",
-            "--hidden-import",
-            "uvicorn",
-            "--hidden-import",
-            "sqlmodel",
-            "--hidden-import",
-            "aiosqlite",
-            "--hidden-import",
-            "aiofiles",
-            "--hidden-import",
-            "apscheduler",
-            "--hidden-import",
-            "diskcache",
-            "--hidden-import",
-            "passlib",
-            "--hidden-import",
-            "passlib.context",
-            "--hidden-import",
-            "passlib.handlers.bcrypt",
-            "--hidden-import",
-            "sqlite_vfs",
-            "--hidden-import",
-            "python_multipart",
-            "--hidden-import",
-            "sqlite_vfs.core",
-            "--hidden-import",
-            "jwt",
-            # 其他选项
-            "--icon",
-            "../../public/chongming.ico",
-            "main.py",
-        ]
+        if is_windows:
+            cmd = [
+                sys.executable,
+                "-m",
+                "PyInstaller",
+                "--onefile",
+                "--name",
+                "chongming",
+                "--distpath",
+                ".",
+                "--workpath",
+                "./build_temp",
+                "--specpath",
+                "./specs",
+                "--clean",
+                # 隐藏导入
+                "--hidden-import",
+                "utils",
+                "--hidden-import",
+                "utils.launch",
+                "--hidden-import",
+                "utils.config",
+                "--hidden-import",
+                "server",
+                "--hidden-import",
+                "module_bank",
+                "--hidden-import",
+                "fastapi",
+                "--hidden-import",
+                "fastapi.staticfiles",
+                "--hidden-import",
+                "fastapi.middleware.cors",
+                "--hidden-import",
+                "uvicorn",
+                "--hidden-import",
+                "sqlmodel",
+                "--hidden-import",
+                "aiosqlite",
+                "--hidden-import",
+                "aiofiles",
+                "--hidden-import",
+                "apscheduler",
+                "--hidden-import",
+                "diskcache",
+                "--hidden-import",
+                "passlib",
+                "--hidden-import",
+                "passlib.context",
+                "--hidden-import",
+                "passlib.handlers.bcrypt",
+                "--hidden-import",
+                "sqlite_vfs",
+                "--hidden-import",
+                "python_multipart",
+                "--hidden-import",
+                "sqlite_vfs.core",
+                "--hidden-import",
+                "jwt",
+                # 其他选项
+                "--icon",
+                "../../public/chongming.ico",
+                "main.py",
+            ]
+        else:
+            cmd = [
+                sys.executable,
+                "-m",
+                "PyInstaller",
+                "--onefile",
+                "--name",
+                "chongming",
+                "--distpath",
+                ".",
+                "--workpath",
+                "./build_temp",
+                "--specpath",
+                "./specs",
+                "--clean",
+                # 隐藏导入
+                "--hidden-import",
+                "utils",
+                "--hidden-import",
+                "utils.launch",
+                "--hidden-import",
+                "utils.config",
+                "--hidden-import",
+                "server",
+                "--hidden-import",
+                "module_bank",
+                "--hidden-import",
+                "fastapi",
+                "--hidden-import",
+                "fastapi.staticfiles",
+                "--hidden-import",
+                "fastapi.middleware.cors",
+                "--hidden-import",
+                "uvicorn",
+                "--hidden-import",
+                "sqlmodel",
+                "--hidden-import",
+                "aiosqlite",
+                "--hidden-import",
+                "aiofiles",
+                "--hidden-import",
+                "apscheduler",
+                "--hidden-import",
+                "diskcache",
+                "--hidden-import",
+                "passlib",
+                "--hidden-import",
+                "passlib.context",
+                "--hidden-import",
+                "passlib.handlers.bcrypt",
+                "--hidden-import",
+                "sqlite_vfs",
+                "--hidden-import",
+                "python_multipart",
+                "--hidden-import",
+                "sqlite_vfs.core",
+                "--hidden-import",
+                "jwt",
+                # gunicorn
+                "--hidden-import",
+                "gunicorn.glogging",
+                "--hidden-import",
+                "gunicorn.app",
+                "--hidden-import",
+                "gunicorn.app.wsgiapp",
+                # 其他选项
+                "--icon",
+                "../../public/chongming.ico",
+                "main.py",
+            ]
 
         print(f"正在运行 PyInstaller: {' '.join(cmd)}")
         result = subprocess.run(cmd, cwd="./build", capture_output=True, text=True)
