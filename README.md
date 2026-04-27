@@ -76,9 +76,6 @@ docker load -i chongming_latest.tar
 
 运行镜像
 ```shell
-mkdir -p /data/chongming
-docker run -d -p 8000:8000 \
-    -v /data/chongming/database.db:/app/database.db \
-    -v /data/chongming/uploads:/app/uploads \
-    --name chongming chongming:latest
+sudo chmod 777 ./deploy.sh
+./deploy.sh
 ```

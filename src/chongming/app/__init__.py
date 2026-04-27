@@ -64,8 +64,12 @@ async def lifespan(app: FastAPI):
     database_config = database.get(database_type, None)
     if database_config is None:
         raise ValueError("配置不存在")
+    database_path = database.get("database_path", None)
+    if database_path:
+        Path(database_path).parent.mkdir(parents=True, exist_ok=True)
+    engine_config = {k: v for k, v in database_config.items() if k != "database_path"}
 
-    engine = create_async_engine(database["url"], **database_config)
+    engine = create_async_engine(database["url"], **engine_config)
     async_session_maker = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )

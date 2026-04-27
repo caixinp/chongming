@@ -134,6 +134,10 @@ def run_pyinstaller():
                 "-m",
                 "PyInstaller",
                 "--onefile",
+                "--noconfirm",
+                "--optimize",
+                "2",
+                "--strip",
                 "--name",
                 "chongming",
                 "--distpath",
@@ -173,11 +177,7 @@ def run_pyinstaller():
                 "--hidden-import",
                 "diskcache",
                 "--hidden-import",
-                "passlib",
-                "--hidden-import",
-                "passlib.context",
-                "--hidden-import",
-                "passlib.handlers.bcrypt",
+                "bcrypt",
                 "--hidden-import",
                 "sqlite_vfs",
                 "--hidden-import",
@@ -197,6 +197,10 @@ def run_pyinstaller():
                 "-m",
                 "PyInstaller",
                 "--onefile",
+                "--noconfirm",
+                "--optimize",
+                "2",
+                "--strip",
                 "--name",
                 "chongming",
                 "--distpath",
@@ -236,11 +240,7 @@ def run_pyinstaller():
                 "--hidden-import",
                 "diskcache",
                 "--hidden-import",
-                "passlib",
-                "--hidden-import",
-                "passlib.context",
-                "--hidden-import",
-                "passlib.handlers.bcrypt",
+                "bcrypt",
                 "--hidden-import",
                 "sqlite_vfs",
                 "--hidden-import",
@@ -309,9 +309,9 @@ async def init_database():
     database_config = database.get(database_type, None)
     if database_config is None:
         raise ValueError("配置不存在")
-
+    os.makedirs("./build/data", exist_ok=True)
     engine = create_async_engine(
-        "sqlite+aiosqlite:///./build/database.db", **database_config
+        "sqlite+aiosqlite:///./build/data/database.db", **database_config
     )
     async_session_maker = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False

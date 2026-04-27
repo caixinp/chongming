@@ -60,6 +60,7 @@ class Database(TypedDict, total=False):
     sqlite: DatabaseSqlite
     mysql: dict
     postgresql: dict
+    database_path: str
 
 
 class Security(TypedDict):

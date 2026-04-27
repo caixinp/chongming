@@ -1,27 +1,27 @@
 [default]
+app.debug = false
+app.description = "基于 FastAPI 的 chongming 打包脚手架"
 app.name = "chongming"
 app.version = "chongming"
-app.description = "基于 FastAPI 的 chongming 打包脚手架"
-app.debug = false
 env = "development"
 prefix = "/api/v1"
 upload_path = "uploads"
 
 [database]
+database_path = "./data/database.db"
 type = "sqlite"
-url = "sqlite+aiosqlite:///./database.db"
-generate_schemas = true  # 生产环境使用迁移工具
+url = "sqlite+aiosqlite:///./data/database.db"
 
 [database.sqlite]
+connect_args.check_same_thread = false
+connect_args.timeout = 15
 echo = true
 echo_pool = true
-pool_size = 20
 max_overflow = 10
-pool_timeout = 30
-pool_recycle = 300
 pool_pre_ping = true
-connect_args.timeout = 15
-connect_args.check_same_thread = false
+pool_recycle = 300
+pool_size = 20
+pool_timeout = 30
 
 [scheduler]
 job_store_path = "scheduler_jobs.db"
@@ -30,61 +30,61 @@ job_store_path = "scheduler_jobs.db"
 cache_store_path = "./"
 
 [security]
-secret_key = "your-secret-key-change-in-production"
-algorithm = "HS256"
 access_token_expire_minutes = 30
-refresh_token_expire_days = 7
+algorithm = "HS256"
 max_sessions_per_user = 5
+refresh_token_expire_days = 7
+secret_key = "your-secret-key-change-in-production"
 
 [development]
-env = "development"
 debug = true
+env = "development"
 
 [development.server]
+access_log = false
 host = "127.0.0.1"
 port = 8000
 reload = true
-access_log = false 
 
 [development.logging]
-level = "DEBUG"
 file = "logs"
 format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+level = "DEBUG"
 
 [development.cors]
-allow_origins = ["*"]
 allow_credentials = true
-allow_methods = ["*"]
 allow_headers = ["*"]
+allow_methods = ["*"]
+allow_origins = ["*"]
 
 [production]
-env = "production"
 debug = false
+env = "production"
 
 [production.server]
+access_log = false
 host = "0.0.0.0"
 port = 8000
 reload = false
 workers = 4
-access_log = false 
 
 [production.logging]
-level = "INFO"
-file = "logs"
-format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-max_size =  10485760 # 10MB
-backup_count = 5  # 最多保存 10 个日志文件
+backup_count = 5 # 最多保存 10 个日志文件
+file = "logs" 
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s" 
+level = "INFO" 
+max_size = 10485760 # 10MB
 
 [production.cors]
-allow_origins = ["https://yourdomain.com", "http://localhost:8000", "http://127.0.0.1:8000"]
 allow_credentials = true
-allow_methods = ["GET", "POST", "PUT", "DELETE"]
 allow_headers = ["Authorization", "Content-Type"]
+allow_methods = ["GET", "POST", "PUT", "DELETE"]
+allow_origins = ["https://yourdomain.com", "http://localhost:8000", "http://127.0.0.1:8000"]
 
 [production.module_system]
-type = "module-bank"
 path = ["resources/app.mbank", "resources/plugins.mbank"]
+type = "module-bank"
 
 [production.file_system]
-type = "svfs"
 path = "static.svfs"
+type = "svfs"
