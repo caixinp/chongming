@@ -6,7 +6,7 @@
 """
 
 import time
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import diskcache
 
@@ -347,7 +347,7 @@ def get_cache() -> Cache:
 # 装饰器：缓存函数结果
 def cached(ttl: Optional[int] = None):
     """
-    函数结果缓存装饰器
+    函数结果缓存装饰器（同步版本）
 
     自动缓存函数的返回值，相同参数的调用直接从缓存返回，
     避免重复计算。适用于纯函数或副作用小的函数。
@@ -363,30 +363,76 @@ def cached(ttl: Optional[int] = None):
         ... def get_user(user_id: int):
         ...     return {"id": user_id, "name": "test"}
         >>>
-        >>> # 第一次调用执行函数并缓存
         >>> get_user(1)
-        >>> # 60秒内再次调用直接返回缓存结果
-        >>> get_user(1)
-
-    Note:
-        - 缓存键由函数名 + 位置参数 + 关键字参数组成
-        - 参数必须是可哈希的，否则会导致错误
-        - 不适合缓存大型对象或频繁变化的数据
-        - 不同参数组合会生成不同的缓存键
     """
 
     def decorator(func):
         def wrapper(*args, **kwargs):
-            # 生成缓存key
             key = f"{func.__name__}:{str(args)}:{str(kwargs)}"
             cache = get_cache()
-            # 尝试从缓存获取
             result = cache.get(key)
             if result is not None:
                 return result
 
-            # 执行函数
             result = func(*args, **kwargs)
+            cache.set(key, result, ex=ttl)
+            return result
+
+        return wrapper
+
+    return decorator
+
+
+# 装饰器：异步函数结果缓存
+def acached(ttl: Optional[int] = None, key_func: Optional[Callable] = None):
+    """
+    函数结果缓存装饰器（异步版本）
+
+    自动缓存异步函数的返回值，相同参数的调用直接从缓存返回。
+    支持自定义缓存键生成函数，以便排除 `session` 等无法序列化
+    或不应作为缓存键一部分的参数。
+
+    Args:
+        ttl: 缓存生存时间（秒），None 表示永不过期
+        key_func: 自定义缓存键生成函数，接收与原始函数相同的参数
+                  (args, kwargs)，返回字符串作为缓存键。
+                  默认使用 f"{func.__name__}:{str(args)}:{str(kwargs)}"
+
+    Returns:
+        callable: 装饰器函数
+
+    Example:
+        >>> @acached(ttl=120, key_func=lambda cls, session, user_id: f"user_perms:{user_id}")
+        ... async def get_permissions_by_user(cls, session, user_id):
+        ...     return await some_db_query(session, user_id)
+        >>>
+        >>> # 需要手动清除缓存时：
+        >>> cache = get_cache()
+        >>> cache.delete("user_perms:xxx-uuid-xxx")
+
+    Note:
+        - 装饰器应放在 @classmethod（如果有的话）下方
+        - 使用 key_func 可以精确控制缓存键，避免 session 等对象影响
+        - 缓存失效需通过 cache.delete(key) 手动操作
+    """
+
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            # 生成缓存key
+            if key_func is not None:
+                key = key_func(*args, **kwargs)
+            else:
+                key = f"{func.__name__}:{str(args)}:{str(kwargs)}"
+
+            cache = get_cache()
+            # 尝试从缓存获取
+            result = cache.get(key)
+            if result is not None:
+                print(f"缓存输出: {result}")
+                return result
+
+            # 执行异步函数
+            result = await func(*args, **kwargs)
 
             # 存入缓存
             cache.set(key, result, ex=ttl)

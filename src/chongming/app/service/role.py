@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Sequence
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -89,6 +89,53 @@ class RoleService:
         result = await session.get(Role, role_id)
         return result
 
+    @classmethod
+    async def list_roles(
+        cls,
+        session: AsyncSession,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[Role]:
+        """
+        获取角色列表，支持分页
+
+        Args:
+            session: 数据库会话对象
+            skip: 跳过的记录数，用于分页
+            limit: 返回的最大记录数，用于分页
+
+        Returns:
+            Sequence[Role]: 角色对象列表
+        """
+        query = select(Role).offset(skip).limit(limit)
+        result = await session.execute(query)
+        return result.scalars().all()
+
+    @classmethod
+    async def get_roles_by_user(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+    ) -> Sequence[Role]:
+        """
+        获取指定用户的所有角色
+
+        Args:
+            session: 数据库会话对象
+            user_id: 用户UUID
+
+        Returns:
+            Sequence[Role]: 用户关联的角色对象列表
+
+        Raises:
+            HTTPException: 当用户不存在时抛出404错误
+        """
+        user = await UserService.get_user_by_id(user_id, session)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return user.roles
+
     @staticmethod
     async def unbind_role_from_user(
         session: AsyncSession,
@@ -103,9 +150,6 @@ class RoleService:
             user_id: 用户UUID
             role_id: 角色ID
 
-        Returns:
-            User: 更新后的用户对象
-
         Raises:
             HTTPException: 当用户不存在时抛出404错误
         """
@@ -117,7 +161,6 @@ class RoleService:
         user.roles = [role for role in user.roles if role.id != role_id]
         await session.commit()
         await session.refresh(user)
-        return user
 
     @staticmethod
     async def delete_role(

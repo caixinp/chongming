@@ -5,8 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...model.todo import TodoCreate, TodoUpdate, TodoRead
 from ...core.database import get_session
+from ...constant.permission import TodoConstant
 from ...service.todo import TodoService
-from ..deps import get_current_user
+from ..deps import get_current_user, PermissionChecker
 
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -17,6 +18,7 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 async def create_todo(
     todo: TodoCreate,
     session: AsyncSession = Depends(get_session),
+    _: bool = Depends(PermissionChecker(TodoConstant.TODO_CREATE)),
 ):
     """
     创建新的待办事项
@@ -33,7 +35,10 @@ async def create_todo(
 
 @router.get("/", response_model=List[TodoRead])
 async def read_todos(
-    offset: int = 0, limit: int = 100, session: AsyncSession = Depends(get_session)
+    offset: int = 0,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_session),
+    _: bool = Depends(PermissionChecker(TodoConstant.TODO_READ)),
 ):
     """
     获取待办事项列表
@@ -50,7 +55,11 @@ async def read_todos(
 
 
 @router.get("/{todo_id}", response_model=TodoRead)
-async def read_todo(todo_id: int, session: AsyncSession = Depends(get_session)):
+async def read_todo(
+    todo_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: bool = Depends(PermissionChecker(TodoConstant.TODO_READ)),
+):
     """
     根据ID获取单个待办事项
 
@@ -72,7 +81,10 @@ async def read_todo(todo_id: int, session: AsyncSession = Depends(get_session)):
 
 @router.patch("/{todo_id}", response_model=TodoRead)
 async def update_todo(
-    todo_id: int, todo_update: TodoUpdate, session: AsyncSession = Depends(get_session)
+    todo_id: int,
+    todo_update: TodoUpdate,
+    session: AsyncSession = Depends(get_session),
+    _: bool = Depends(PermissionChecker(TodoConstant.TODO_UPDATE)),
 ):
     """
     更新待办事项信息
@@ -90,7 +102,11 @@ async def update_todo(
 
 
 @router.delete("/{todo_id}")
-async def delete_todo(todo_id: int, session: AsyncSession = Depends(get_session)):
+async def delete_todo(
+    todo_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: bool = Depends(PermissionChecker(TodoConstant.TODO_DELETE)),
+):
     """
     删除待办事项
 

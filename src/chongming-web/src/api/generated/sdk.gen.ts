@@ -2,7 +2,7 @@
 
 import { type Client, formDataBodySerializer, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateTodoApiV1TodosPostData, CreateTodoApiV1TodosPostErrors, CreateTodoApiV1TodosPostResponses, DeleteTodoApiV1TodosTodoIdDeleteData, DeleteTodoApiV1TodosTodoIdDeleteErrors, DeleteTodoApiV1TodosTodoIdDeleteResponses, GetCurrentUserInfoApiV1AuthMeGetData, GetCurrentUserInfoApiV1AuthMeGetErrors, GetCurrentUserInfoApiV1AuthMeGetResponses, GetSessionsApiV1AuthSessionsGetData, GetSessionsApiV1AuthSessionsGetResponses, LoginApiV1AuthLoginPostData, LoginApiV1AuthLoginPostErrors, LoginApiV1AuthLoginPostResponses, LogoutAllApiV1AuthLogoutAllPostData, LogoutAllApiV1AuthLogoutAllPostResponses, LogoutApiV1AuthLogoutPostData, LogoutApiV1AuthLogoutPostResponses, ReadTodoApiV1TodosTodoIdGetData, ReadTodoApiV1TodosTodoIdGetErrors, ReadTodoApiV1TodosTodoIdGetResponses, ReadTodosApiV1TodosGetData, ReadTodosApiV1TodosGetErrors, ReadTodosApiV1TodosGetResponses, RefreshTokenApiV1AuthRefreshPostData, RefreshTokenApiV1AuthRefreshPostErrors, RefreshTokenApiV1AuthRefreshPostResponses, RegisterApiV1AuthRegisterPostData, RegisterApiV1AuthRegisterPostErrors, RegisterApiV1AuthRegisterPostResponses, RootGetData, RootGetResponses, UpdateTodoApiV1TodosTodoIdPatchData, UpdateTodoApiV1TodosTodoIdPatchErrors, UpdateTodoApiV1TodosTodoIdPatchResponses, UploadImageApiV1UploadImagePostData, UploadImageApiV1UploadImagePostErrors, UploadImageApiV1UploadImagePostResponses } from './types.gen';
+import type { AssignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPostData, AssignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPostErrors, AssignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPostResponses, AssignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPostData, AssignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPostErrors, AssignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPostResponses, AssignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPostData, AssignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPostErrors, AssignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPostResponses, AssignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPostData, AssignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPostErrors, AssignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPostResponses, CreatePermissionApiV1PermissionsPostData, CreatePermissionApiV1PermissionsPostErrors, CreatePermissionApiV1PermissionsPostResponses, CreateRoleApiV1RolesPostData, CreateRoleApiV1RolesPostErrors, CreateRoleApiV1RolesPostResponses, CreateTodoApiV1TodosPostData, CreateTodoApiV1TodosPostErrors, CreateTodoApiV1TodosPostResponses, DeletePermissionApiV1PermissionsPermissionIdDeleteData, DeletePermissionApiV1PermissionsPermissionIdDeleteErrors, DeletePermissionApiV1PermissionsPermissionIdDeleteResponses, DeleteRoleApiV1RolesRoleIdDeleteData, DeleteRoleApiV1RolesRoleIdDeleteErrors, DeleteRoleApiV1RolesRoleIdDeleteResponses, DeleteTodoApiV1TodosTodoIdDeleteData, DeleteTodoApiV1TodosTodoIdDeleteErrors, DeleteTodoApiV1TodosTodoIdDeleteResponses, GetCurrentUserInfoApiV1AuthMeGetData, GetCurrentUserInfoApiV1AuthMeGetErrors, GetCurrentUserInfoApiV1AuthMeGetResponses, GetPermissionApiV1PermissionsPermissionIdGetData, GetPermissionApiV1PermissionsPermissionIdGetErrors, GetPermissionApiV1PermissionsPermissionIdGetResponses, GetRoleApiV1RolesRoleIdGetData, GetRoleApiV1RolesRoleIdGetErrors, GetRoleApiV1RolesRoleIdGetResponses, GetRolePermissionsApiV1RolesRoleIdPermissionsGetData, GetRolePermissionsApiV1RolesRoleIdPermissionsGetErrors, GetRolePermissionsApiV1RolesRoleIdPermissionsGetResponses, GetSessionsApiV1AuthSessionsGetData, GetSessionsApiV1AuthSessionsGetResponses, ListPermissionsApiV1PermissionsGetData, ListPermissionsApiV1PermissionsGetErrors, ListPermissionsApiV1PermissionsGetResponses, ListRolesApiV1RolesGetData, ListRolesApiV1RolesGetErrors, ListRolesApiV1RolesGetResponses, LoginApiV1AuthLoginPostData, LoginApiV1AuthLoginPostErrors, LoginApiV1AuthLoginPostResponses, LogoutAllApiV1AuthLogoutAllPostData, LogoutAllApiV1AuthLogoutAllPostResponses, LogoutApiV1AuthLogoutPostData, LogoutApiV1AuthLogoutPostResponses, ReadTodoApiV1TodosTodoIdGetData, ReadTodoApiV1TodosTodoIdGetErrors, ReadTodoApiV1TodosTodoIdGetResponses, ReadTodosApiV1TodosGetData, ReadTodosApiV1TodosGetErrors, ReadTodosApiV1TodosGetResponses, RefreshTokenApiV1AuthRefreshPostData, RefreshTokenApiV1AuthRefreshPostErrors, RefreshTokenApiV1AuthRefreshPostResponses, RegisterApiV1AuthRegisterPostData, RegisterApiV1AuthRegisterPostErrors, RegisterApiV1AuthRegisterPostResponses, RootGetData, RootGetResponses, UnbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPostData, UnbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPostErrors, UnbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPostResponses, UnbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPostData, UnbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPostErrors, UnbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPostResponses, UnbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPostData, UnbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPostErrors, UnbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPostResponses, UnbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPostData, UnbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPostErrors, UnbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPostResponses, UpdatePermissionApiV1PermissionsPermissionIdPutData, UpdatePermissionApiV1PermissionsPermissionIdPutErrors, UpdatePermissionApiV1PermissionsPermissionIdPutResponses, UpdateRoleApiV1RolesRoleIdPutData, UpdateRoleApiV1RolesRoleIdPutErrors, UpdateRoleApiV1RolesRoleIdPutResponses, UpdateTodoApiV1TodosTodoIdPatchData, UpdateTodoApiV1TodosTodoIdPatchErrors, UpdateTodoApiV1TodosTodoIdPatchResponses, UploadImageApiV1UploadImagePostData, UploadImageApiV1UploadImagePostErrors, UploadImageApiV1UploadImagePostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -20,6 +20,16 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 
 /**
  * Read Todos
+ *
+ * 获取待办事项列表
+ *
+ * Args:
+ * offset: 分页偏移量，默认为0，用于指定从第几条记录开始查询
+ * limit: 每页返回的最大记录数，默认为100，用于限制返回结果的数量
+ * session: 数据库会话对象，用于执行数据库操作
+ *
+ * Returns:
+ * List[TodoRead]: 待办事项列表，包含指定范围内的所有待办事项
  */
 export const readTodosApiV1TodosGet = <ThrowOnError extends boolean = false>(options?: Options<ReadTodosApiV1TodosGetData, ThrowOnError>) => (options?.client ?? client).get<ReadTodosApiV1TodosGetResponses, ReadTodosApiV1TodosGetErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -29,6 +39,15 @@ export const readTodosApiV1TodosGet = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Create Todo
+ *
+ * 创建新的待办事项
+ *
+ * Args:
+ * todo: 待办事项创建请求体，包含待办事项的详细信息
+ * session: 数据库会话对象，用于执行数据库操作
+ *
+ * Returns:
+ * TodoRead: 创建成功的待办事项对象，包含完整的待办事项信息
  */
 export const createTodoApiV1TodosPost = <ThrowOnError extends boolean = false>(options: Options<CreateTodoApiV1TodosPostData, ThrowOnError>) => (options.client ?? client).post<CreateTodoApiV1TodosPostResponses, CreateTodoApiV1TodosPostErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -42,6 +61,18 @@ export const createTodoApiV1TodosPost = <ThrowOnError extends boolean = false>(o
 
 /**
  * Delete Todo
+ *
+ * 删除待办事项
+ *
+ * Args:
+ * todo_id: 待办事项的唯一标识符
+ * session: 数据库会话对象，用于执行数据库操作
+ *
+ * Returns:
+ * dict: 包含操作结果的字典，{"ok": True} 表示删除成功
+ *
+ * Raises:
+ * HTTPException: 当待办事项不存在时抛出404错误
  */
 export const deleteTodoApiV1TodosTodoIdDelete = <ThrowOnError extends boolean = false>(options: Options<DeleteTodoApiV1TodosTodoIdDeleteData, ThrowOnError>) => (options.client ?? client).delete<DeleteTodoApiV1TodosTodoIdDeleteResponses, DeleteTodoApiV1TodosTodoIdDeleteErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -51,6 +82,18 @@ export const deleteTodoApiV1TodosTodoIdDelete = <ThrowOnError extends boolean = 
 
 /**
  * Read Todo
+ *
+ * 根据ID获取单个待办事项
+ *
+ * Args:
+ * todo_id: 待办事项的唯一标识符
+ * session: 数据库会话对象，用于执行数据库操作
+ *
+ * Returns:
+ * TodoRead: 查询到的待办事项对象
+ *
+ * Raises:
+ * HTTPException: 当待办事项不存在时抛出404错误
  */
 export const readTodoApiV1TodosTodoIdGet = <ThrowOnError extends boolean = false>(options: Options<ReadTodoApiV1TodosTodoIdGetData, ThrowOnError>) => (options.client ?? client).get<ReadTodoApiV1TodosTodoIdGetResponses, ReadTodoApiV1TodosTodoIdGetErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -60,6 +103,16 @@ export const readTodoApiV1TodosTodoIdGet = <ThrowOnError extends boolean = false
 
 /**
  * Update Todo
+ *
+ * 更新待办事项信息
+ *
+ * Args:
+ * todo_id: 待办事项的唯一标识符
+ * todo_update: 待办事项更新请求体，包含需要更新的字段信息
+ * session: 数据库会话对象，用于执行数据库操作
+ *
+ * Returns:
+ * TodoRead: 更新后的待办事项对象，包含最新的待办事项信息
  */
 export const updateTodoApiV1TodosTodoIdPatch = <ThrowOnError extends boolean = false>(options: Options<UpdateTodoApiV1TodosTodoIdPatchData, ThrowOnError>) => (options.client ?? client).patch<UpdateTodoApiV1TodosTodoIdPatchResponses, UpdateTodoApiV1TodosTodoIdPatchErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -73,6 +126,20 @@ export const updateTodoApiV1TodosTodoIdPatch = <ThrowOnError extends boolean = f
 
 /**
  * Register
+ *
+ * 用户注册接口
+ *
+ * 创建新用户账户，检查邮箱是否已被注册，如果邮箱未被注册则创建新用户。
+ *
+ * Args:
+ * user_data: 用户注册数据，包含邮箱、密码、用户名和全名等信息
+ * session: 数据库会话对象，用于执行数据库操作
+ *
+ * Returns:
+ * UserRead: 创建成功的用户信息，包含用户ID、邮箱、用户名等字段
+ *
+ * Raises:
+ * HTTPException: 当邮箱已被注册时抛出400错误
  */
 export const registerApiV1AuthRegisterPost = <ThrowOnError extends boolean = false>(options: Options<RegisterApiV1AuthRegisterPostData, ThrowOnError>) => (options.client ?? client).post<RegisterApiV1AuthRegisterPostResponses, RegisterApiV1AuthRegisterPostErrors, ThrowOnError>({
     url: '/api/v1/auth/register',
@@ -85,6 +152,24 @@ export const registerApiV1AuthRegisterPost = <ThrowOnError extends boolean = fal
 
 /**
  * Login
+ *
+ * 用户登录接口
+ *
+ * 验证用户凭据并生成访问令牌和刷新令牌。依次检查邮箱是否存在、密码是否正确、用户是否被禁用。
+ *
+ * Args:
+ * user_data: 用户登录数据，包含邮箱和密码
+ * request: FastAPI请求对象，用于获取客户端信息
+ * session: 数据库会话对象，用于查询用户信息
+ *
+ * Returns:
+ * TokenResponse: 包含访问令牌(access_token)、刷新令牌(refresh_token)和令牌类型(token_type)的响应对象
+ *
+ * Raises:
+ * HTTPException:
+ * - 400错误：当邮箱不存在时
+ * - 401错误：当密码错误时
+ * - 402错误：当用户账户被禁用时
  */
 export const loginApiV1AuthLoginPost = <ThrowOnError extends boolean = false>(options: Options<LoginApiV1AuthLoginPostData, ThrowOnError>) => (options.client ?? client).post<LoginApiV1AuthLoginPostResponses, LoginApiV1AuthLoginPostErrors, ThrowOnError>({
     url: '/api/v1/auth/login',
@@ -97,6 +182,21 @@ export const loginApiV1AuthLoginPost = <ThrowOnError extends boolean = false>(op
 
 /**
  * 刷新访问令牌
+ *
+ * 刷新访问令牌接口
+ *
+ * 使用有效的刷新令牌获取新的访问令牌。验证刷新令牌的有效性，如果有效则生成新的访问令牌。
+ *
+ * Args:
+ * request: FastAPI请求对象，用于获取客户端信息
+ * credentials: HTTP认证凭证，从请求头中提取的刷新令牌
+ * session: 数据库会话对象，用于验证令牌状态
+ *
+ * Returns:
+ * RefreshTokenResponse: 包含新的访问令牌(access_token)和令牌类型(token_type)的响应对象
+ *
+ * Raises:
+ * HTTPException: 当刷新令牌无效或已过期时抛出401错误
  */
 export const refreshTokenApiV1AuthRefreshPost = <ThrowOnError extends boolean = false>(options?: Options<RefreshTokenApiV1AuthRefreshPostData, ThrowOnError>) => (options?.client ?? client).post<RefreshTokenApiV1AuthRefreshPostResponses, RefreshTokenApiV1AuthRefreshPostErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -106,6 +206,16 @@ export const refreshTokenApiV1AuthRefreshPost = <ThrowOnError extends boolean = 
 
 /**
  * Logout
+ *
+ * 用户登出接口
+ *
+ * 使当前的访问令牌失效，实现单设备登出功能。
+ *
+ * Args:
+ * credentials: HTTP认证凭证，从请求头中提取的访问令牌
+ *
+ * Returns:
+ * Userlogout: 登出成功响应，包含成功消息和状态码200
  */
 export const logoutApiV1AuthLogoutPost = <ThrowOnError extends boolean = false>(options?: Options<LogoutApiV1AuthLogoutPostData, ThrowOnError>) => (options?.client ?? client).post<LogoutApiV1AuthLogoutPostResponses, unknown, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -115,6 +225,16 @@ export const logoutApiV1AuthLogoutPost = <ThrowOnError extends boolean = false>(
 
 /**
  * 登出所有设备
+ *
+ * 登出所有设备接口
+ *
+ * 使指定用户的所有活跃会话令牌失效，实现多设备同时登出功能。
+ *
+ * Args:
+ * current_user: 当前登录用户的令牌数据，包含用户ID等信息
+ *
+ * Returns:
+ * Userlogout: 登出成功响应，包含成功消息和状态码200
  */
 export const logoutAllApiV1AuthLogoutAllPost = <ThrowOnError extends boolean = false>(options?: Options<LogoutAllApiV1AuthLogoutAllPostData, ThrowOnError>) => (options?.client ?? client).post<LogoutAllApiV1AuthLogoutAllPostResponses, unknown, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -125,7 +245,15 @@ export const logoutAllApiV1AuthLogoutAllPost = <ThrowOnError extends boolean = f
 /**
  * 获取用户会话
  *
- * 获取用户的所有活跃会话
+ * 获取用户会话列表接口
+ *
+ * 查询并返回指定用户的所有活跃会话信息，包括每个会话的设备信息和创建时间等。
+ *
+ * Args:
+ * current_user: 当前登录用户的令牌数据，包含用户ID等信息
+ *
+ * Returns:
+ * UserSession: 用户会话信息对象，包含用户ID、会话列表和会话总数
  */
 export const getSessionsApiV1AuthSessionsGet = <ThrowOnError extends boolean = false>(options?: Options<GetSessionsApiV1AuthSessionsGetData, ThrowOnError>) => (options?.client ?? client).get<GetSessionsApiV1AuthSessionsGetResponses, unknown, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -136,7 +264,19 @@ export const getSessionsApiV1AuthSessionsGet = <ThrowOnError extends boolean = f
 /**
  * 获取当前用户信息
  *
- * 获取当前登录用户的信息
+ * 获取当前用户信息接口
+ *
+ * 根据当前登录用户的令牌信息，从数据库中查询并返回完整的用户资料。
+ *
+ * Args:
+ * session: 数据库会话对象，用于查询用户信息
+ * current_user: 当前登录用户的令牌数据，包含用户ID等信息
+ *
+ * Returns:
+ * UserRead: 用户详细信息，包含用户ID、邮箱、用户名、全名、激活状态等字段
+ *
+ * Raises:
+ * HTTPException: 当用户不存在时抛出404错误
  */
 export const getCurrentUserInfoApiV1AuthMeGet = <ThrowOnError extends boolean = false>(options?: Options<GetCurrentUserInfoApiV1AuthMeGetData, ThrowOnError>) => (options?.client ?? client).get<GetCurrentUserInfoApiV1AuthMeGetResponses, GetCurrentUserInfoApiV1AuthMeGetErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -146,6 +286,30 @@ export const getCurrentUserInfoApiV1AuthMeGet = <ThrowOnError extends boolean = 
 
 /**
  * Upload Image
+ *
+ * 上传图片文件接口
+ *
+ * 该接口用于接收用户上传的图片文件，进行格式验证后保存到服务器，
+ * 并返回文件的访问URL、文件名和文件类型信息。
+ *
+ * Args:
+ * file (UploadFile): 上传的文件对象，必须为图片格式
+ *
+ * Returns:
+ * UploadResponse: 包含以下字段的响应对象：
+ * - url (str): 上传文件的访问URL
+ * - filename (str): 保存后的文件名
+ * - file_type (str): 文件扩展名（如 .jpg, .png 等）
+ *
+ * Raises:
+ * HTTPException:
+ * - 400: 当文件类型不是图片格式时
+ * - 400: 当文件名为空时
+ * - 400: 当文件扩展名不在允许列表中时
+ *
+ * Note:
+ * 支持的图片格式包括：.jpg, .jpeg, .png, .gif, .webp
+ * 需要用户认证才能访问此接口
  */
 export const uploadImageApiV1UploadImagePost = <ThrowOnError extends boolean = false>(options: Options<UploadImageApiV1UploadImagePostData, ThrowOnError>) => (options.client ?? client).post<UploadImageApiV1UploadImagePostResponses, UploadImageApiV1UploadImagePostErrors, ThrowOnError>({
     ...formDataBodySerializer,
@@ -159,8 +323,483 @@ export const uploadImageApiV1UploadImagePost = <ThrowOnError extends boolean = f
 });
 
 /**
+ * 获取权限列表
+ *
+ * 获取权限列表
+ *
+ * 返回系统中的所有权限项，支持分页和按资源名称筛选。
+ *
+ * Args:
+ * skip: 跳过的记录数，用于分页
+ * limit: 返回的最大记录数，用于分页
+ * resource: 资源名称筛选条件，可选
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * list[Permission]: 权限对象列表
+ */
+export const listPermissionsApiV1PermissionsGet = <ThrowOnError extends boolean = false>(options?: Options<ListPermissionsApiV1PermissionsGetData, ThrowOnError>) => (options?.client ?? client).get<ListPermissionsApiV1PermissionsGetResponses, ListPermissionsApiV1PermissionsGetErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/permissions',
+    ...options
+});
+
+/**
+ * 创建权限
+ *
+ * 创建权限
+ *
+ * 创建新的权限项，权限名称格式应为"资源:操作"，如"user:create"。
+ *
+ * Args:
+ * permission_data: 权限创建数据，包含名称、资源、操作和描述等信息
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * Permission: 创建成功的权限对象
+ *
+ * Raises:
+ * HTTPException: 当权限名称已存在时抛出400错误
+ */
+export const createPermissionApiV1PermissionsPost = <ThrowOnError extends boolean = false>(options: Options<CreatePermissionApiV1PermissionsPostData, ThrowOnError>) => (options.client ?? client).post<CreatePermissionApiV1PermissionsPostResponses, CreatePermissionApiV1PermissionsPostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/permissions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * 删除权限
+ *
+ * 删除权限
+ *
+ * 删除指定权限。如果权限已被分配给角色，则无法删除。
+ *
+ * Args:
+ * permission_id: 权限ID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * dict: 删除成功响应消息
+ *
+ * Raises:
+ * HTTPException: 当权限被角色使用时抛出400错误，权限不存在时抛出404错误
+ */
+export const deletePermissionApiV1PermissionsPermissionIdDelete = <ThrowOnError extends boolean = false>(options: Options<DeletePermissionApiV1PermissionsPermissionIdDeleteData, ThrowOnError>) => (options.client ?? client).delete<DeletePermissionApiV1PermissionsPermissionIdDeleteResponses, DeletePermissionApiV1PermissionsPermissionIdDeleteErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/permissions/{permission_id}',
+    ...options
+});
+
+/**
+ * 获取权限详情
+ *
+ * 获取权限详情
+ *
+ * 根据权限ID获取指定权限的详细信息。
+ *
+ * Args:
+ * permission_id: 权限ID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * Permission: 权限对象
+ *
+ * Raises:
+ * HTTPException: 当权限不存在时抛出404错误
+ */
+export const getPermissionApiV1PermissionsPermissionIdGet = <ThrowOnError extends boolean = false>(options: Options<GetPermissionApiV1PermissionsPermissionIdGetData, ThrowOnError>) => (options.client ?? client).get<GetPermissionApiV1PermissionsPermissionIdGetResponses, GetPermissionApiV1PermissionsPermissionIdGetErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/permissions/{permission_id}',
+    ...options
+});
+
+/**
+ * 更新权限
+ *
+ * 更新权限信息
+ *
+ * 更新指定权限的名称、描述、资源或操作等信息。
+ *
+ * Args:
+ * permission_id: 权限ID
+ * permission_update: 权限更新数据，所有字段可选
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * Permission: 更新后的权限对象
+ *
+ * Raises:
+ * HTTPException: 当权限不存在时抛出404错误
+ */
+export const updatePermissionApiV1PermissionsPermissionIdPut = <ThrowOnError extends boolean = false>(options: Options<UpdatePermissionApiV1PermissionsPermissionIdPutData, ThrowOnError>) => (options.client ?? client).put<UpdatePermissionApiV1PermissionsPermissionIdPutResponses, UpdatePermissionApiV1PermissionsPermissionIdPutErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/permissions/{permission_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * 将权限分配给角色
+ *
+ * 将权限分配给角色
+ *
+ * 将指定权限分配给指定角色。
+ *
+ * Args:
+ * permission_id: 权限ID
+ * role_id: 角色ID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * dict: 分配成功响应消息
+ *
+ * Raises:
+ * HTTPException: 当权限已分配给角色或角色/权限不存在时抛出错误
+ */
+export const assignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPost = <ThrowOnError extends boolean = false>(options: Options<AssignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPostData, ThrowOnError>) => (options.client ?? client).post<AssignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPostResponses, AssignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/permissions/{permission_id}/assign-to-role/{role_id}',
+    ...options
+});
+
+/**
+ * 从角色解除权限绑定
+ *
+ * 从角色解除权限绑定
+ *
+ * 将指定权限从指定角色中移除。
+ *
+ * Args:
+ * permission_id: 权限ID
+ * role_id: 角色ID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * dict: 解绑成功响应消息
+ *
+ * Raises:
+ * HTTPException: 当角色不存在时抛出404错误
+ */
+export const unbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPost = <ThrowOnError extends boolean = false>(options: Options<UnbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPostData, ThrowOnError>) => (options.client ?? client).post<UnbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPostResponses, UnbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/permissions/{permission_id}/unbind-from-role/{role_id}',
+    ...options
+});
+
+/**
+ * 将权限分配给用户
+ *
+ * 将权限分配给用户
+ *
+ * 将指定权限分配给指定用户。如果用户没有专属角色，则会自动创建一个专属角色。
+ *
+ * Args:
+ * permission_id: 权限ID
+ * user_id: 用户UUID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * dict: 分配成功响应消息
+ *
+ * Raises:
+ * HTTPException: 当用户或权限不存在时抛出404错误
+ */
+export const assignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPost = <ThrowOnError extends boolean = false>(options: Options<AssignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPostData, ThrowOnError>) => (options.client ?? client).post<AssignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPostResponses, AssignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/permissions/{permission_id}/assign-to-user/{user_id}',
+    ...options
+});
+
+/**
+ * 从用户解除权限绑定
+ *
+ * 从用户解除权限绑定
+ *
+ * 将指定权限从指定用户中移除。
+ *
+ * Args:
+ * permission_id: 权限ID
+ * user_id: 用户UUID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * dict: 解绑成功响应消息
+ *
+ * Raises:
+ * HTTPException: 当用户或角色不存在时抛出404错误
+ */
+export const unbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPost = <ThrowOnError extends boolean = false>(options: Options<UnbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPostData, ThrowOnError>) => (options.client ?? client).post<UnbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPostResponses, UnbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/permissions/{permission_id}/unbind-from-user/{user_id}',
+    ...options
+});
+
+/**
+ * 获取角色列表
+ *
+ * 获取角色列表
+ *
+ * 返回系统中的所有角色，支持分页。
+ *
+ * Args:
+ * skip: 跳过的记录数，用于分页
+ * limit: 返回的最大记录数，用于分页
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * list[Role]: 角色对象列表
+ */
+export const listRolesApiV1RolesGet = <ThrowOnError extends boolean = false>(options?: Options<ListRolesApiV1RolesGetData, ThrowOnError>) => (options?.client ?? client).get<ListRolesApiV1RolesGetResponses, ListRolesApiV1RolesGetErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/roles',
+    ...options
+});
+
+/**
+ * 创建角色
+ *
+ * 创建角色
+ *
+ * 创建新的角色，如 admin、manager、operator 等。
+ *
+ * Args:
+ * name: 角色名称
+ * description: 角色描述，可选
+ * is_only_user: 是否仅用于单个用户，默认为False
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * Role: 创建成功的角色对象
+ *
+ * Raises:
+ * HTTPException: 当角色名称已存在时抛出400错误
+ */
+export const createRoleApiV1RolesPost = <ThrowOnError extends boolean = false>(options: Options<CreateRoleApiV1RolesPostData, ThrowOnError>) => (options.client ?? client).post<CreateRoleApiV1RolesPostResponses, CreateRoleApiV1RolesPostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/roles',
+    ...options
+});
+
+/**
+ * 删除角色
+ *
+ * 删除角色
+ *
+ * 删除指定角色。如果角色已被分配给用户，则无法删除。
+ *
+ * Args:
+ * role_id: 角色ID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * dict: 删除成功响应消息
+ *
+ * Raises:
+ * HTTPException: 当角色被用户使用时抛出400错误，角色不存在时抛出404错误
+ */
+export const deleteRoleApiV1RolesRoleIdDelete = <ThrowOnError extends boolean = false>(options: Options<DeleteRoleApiV1RolesRoleIdDeleteData, ThrowOnError>) => (options.client ?? client).delete<DeleteRoleApiV1RolesRoleIdDeleteResponses, DeleteRoleApiV1RolesRoleIdDeleteErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/roles/{role_id}',
+    ...options
+});
+
+/**
+ * 获取角色详情
+ *
+ * 获取角色详情
+ *
+ * 根据角色ID获取指定角色的详细信息。
+ *
+ * Args:
+ * role_id: 角色ID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * Role: 角色对象
+ *
+ * Raises:
+ * HTTPException: 当角色不存在时抛出404错误
+ */
+export const getRoleApiV1RolesRoleIdGet = <ThrowOnError extends boolean = false>(options: Options<GetRoleApiV1RolesRoleIdGetData, ThrowOnError>) => (options.client ?? client).get<GetRoleApiV1RolesRoleIdGetResponses, GetRoleApiV1RolesRoleIdGetErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/roles/{role_id}',
+    ...options
+});
+
+/**
+ * 更新角色
+ *
+ * 更新角色信息
+ *
+ * 更新指定角色的名称或描述等信息。
+ *
+ * Args:
+ * role_id: 角色ID
+ * role_update: 角色更新数据，所有字段可选
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * Role: 更新后的角色对象
+ *
+ * Raises:
+ * HTTPException: 当角色不存在时抛出404错误
+ */
+export const updateRoleApiV1RolesRoleIdPut = <ThrowOnError extends boolean = false>(options: Options<UpdateRoleApiV1RolesRoleIdPutData, ThrowOnError>) => (options.client ?? client).put<UpdateRoleApiV1RolesRoleIdPutResponses, UpdateRoleApiV1RolesRoleIdPutErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/roles/{role_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * 将角色分配给用户
+ *
+ * 将角色分配给用户
+ *
+ * 将指定角色分配给指定用户。
+ *
+ * Args:
+ * role_id: 角色ID
+ * user_id: 用户UUID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * dict: 分配成功响应消息
+ *
+ * Raises:
+ * HTTPException: 当角色或用户不存在时抛出404错误
+ */
+export const assignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPost = <ThrowOnError extends boolean = false>(options: Options<AssignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPostData, ThrowOnError>) => (options.client ?? client).post<AssignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPostResponses, AssignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/roles/{role_id}/assign-to-user/{user_id}',
+    ...options
+});
+
+/**
+ * 从用户解除角色绑定
+ *
+ * 从用户解除角色绑定
+ *
+ * 将指定角色从指定用户中移除。
+ *
+ * Args:
+ * role_id: 角色ID
+ * user_id: 用户UUID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * dict: 解绑成功响应消息
+ *
+ * Raises:
+ * HTTPException: 当用户不存在时抛出404错误
+ */
+export const unbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPost = <ThrowOnError extends boolean = false>(options: Options<UnbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPostData, ThrowOnError>) => (options.client ?? client).post<UnbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPostResponses, UnbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/roles/{role_id}/unbind-from-user/{user_id}',
+    ...options
+});
+
+/**
+ * 获取角色的权限列表
+ *
+ * 获取指定角色的所有权限
+ *
+ * Args:
+ * role_id: 角色ID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * list: 权限对象列表
+ */
+export const getRolePermissionsApiV1RolesRoleIdPermissionsGet = <ThrowOnError extends boolean = false>(options: Options<GetRolePermissionsApiV1RolesRoleIdPermissionsGetData, ThrowOnError>) => (options.client ?? client).get<GetRolePermissionsApiV1RolesRoleIdPermissionsGetResponses, GetRolePermissionsApiV1RolesRoleIdPermissionsGetErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/roles/{role_id}/permissions',
+    ...options
+});
+
+/**
+ * 为角色分配权限
+ *
+ * 为角色分配权限
+ *
+ * 将指定权限分配给指定角色。
+ *
+ * Args:
+ * role_id: 角色ID
+ * permission_id: 权限ID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * dict: 分配成功响应消息
+ *
+ * Raises:
+ * HTTPException: 当权限已分配给角色或角色/权限不存在时抛出错误
+ */
+export const assignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPost = <ThrowOnError extends boolean = false>(options: Options<AssignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPostData, ThrowOnError>) => (options.client ?? client).post<AssignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPostResponses, AssignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/roles/{role_id}/assign-permission/{permission_id}',
+    ...options
+});
+
+/**
+ * 从角色解除权限绑定
+ *
+ * 从角色解除权限绑定
+ *
+ * 将指定权限从指定角色中移除。
+ *
+ * Args:
+ * role_id: 角色ID
+ * permission_id: 权限ID
+ * session: 数据库会话对象
+ * current_user: 当前登录用户
+ *
+ * Returns:
+ * dict: 解绑成功响应消息
+ *
+ * Raises:
+ * HTTPException: 当角色不存在时抛出404错误
+ */
+export const unbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPost = <ThrowOnError extends boolean = false>(options: Options<UnbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPostData, ThrowOnError>) => (options.client ?? client).post<UnbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPostResponses, UnbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/roles/{role_id}/unbind-permission/{permission_id}',
+    ...options
+});
+
+/**
  * 根路径
  *
- * 根路径，返回应用信息
+ * 根路径端点，返回应用的基本信息。
+ *
+ * 返回:
+ * dict: 包含应用名称、版本、文档地址和健康检查地址的字典
  */
 export const rootGet = <ThrowOnError extends boolean = false>(options?: Options<RootGetData, ThrowOnError>) => (options?.client ?? client).get<RootGetResponses, unknown, ThrowOnError>({ url: '/', ...options });

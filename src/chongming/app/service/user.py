@@ -1,5 +1,6 @@
 from typing import Optional
 from uuid import UUID
+import time
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,7 +61,7 @@ class UserService:
             IntegrityError: 当邮箱已存在时可能抛出完整性错误
         """
         hashed = get_password_hash(password)
-        user = User(email=email, hashed_password=hashed, **kwargs)
+        user = User(email=email, hashed_password=hashed, created_at=str(time.time() * 1000), **kwargs)
         session.add(user)
         await session.commit()
         await session.refresh(user)

@@ -16,6 +16,14 @@ export type BodyUploadImageApiV1UploadImagePost = {
 
 /**
  * Detail
+ *
+ * HTTP错误详情模型
+ *
+ * 用于封装HTTP错误的详细信息，包括错误消息和错误代码。
+ *
+ * Attributes:
+ * message (str): 错误描述信息
+ * code (int): 错误状态码或业务错误码
  */
 export type Detail = {
     /**
@@ -30,6 +38,14 @@ export type Detail = {
 
 /**
  * HTTPError
+ *
+ * HTTP错误响应模型
+ *
+ * 用于标准化HTTP错误响应的数据结构，符合RESTful API规范。
+ *
+ * Attributes:
+ * detail (Optional[Detail]): 错误详情对象，包含具体的错误信息和错误码。
+ * 如果为None，表示没有详细的错误信息。
  */
 export type HttpError = {
     detail?: Detail | null;
@@ -46,9 +62,113 @@ export type HttpValidationError = {
 };
 
 /**
+ * Permission
+ *
+ * 权限模型类，用于定义系统中的权限项。
+ *
+ * 权限采用资源:操作的格式进行标识，例如：
+ * - user:create 表示创建用户的权限
+ * - order:delete 表示删除订单的权限
+ *
+ * Attributes:
+ * id: 权限的唯一标识符，主键，自增
+ * name: 权限标识符，唯一且建立索引，格式为"资源:操作"
+ * description: 权限的描述信息，可选字段
+ * resource: 资源名称，建立索引，如 user、order、product 等
+ * action: 操作类型，如 create、read、update、delete 等
+ * roles: 关联的角色列表，通过 RolePermission 中间表实现多对多关系
+ */
+export type Permission = {
+    /**
+     * Id
+     */
+    id?: number | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Resource
+     */
+    resource: string;
+    /**
+     * Action
+     */
+    action: string;
+};
+
+/**
+ * PermissionCreate
+ *
+ * 权限创建请求模型类，用于接收权限创建时的参数。
+ *
+ * Attributes:
+ * name: 权限名称，格式为"资源:操作"
+ * description: 权限描述信息，可选字段
+ * resource: 资源名称，如 user、order、product 等
+ * action: 操作类型，如 create、read、update、delete 等
+ */
+export type PermissionCreate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Resource
+     */
+    resource: string;
+    /**
+     * Action
+     */
+    action: string;
+};
+
+/**
+ * PermissionUpdate
+ *
+ * 权限更新请求模型类，用于接收权限更新时的参数。
+ *
+ * 所有字段均为可选，允许部分更新权限信息。
+ *
+ * Attributes:
+ * name: 更新后的权限名称，可选字段
+ * description: 更新后的权限描述信息，可选字段
+ * resource: 更新后的资源名称，可选字段
+ * action: 更新后的操作类型，可选字段
+ */
+export type PermissionUpdate = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Resource
+     */
+    resource?: string | null;
+    /**
+     * Action
+     */
+    action?: string | null;
+};
+
+/**
  * RefreshTokenResponse
  *
  * 刷新 Token 响应模型
+ *
+ * 用于刷新 token 接口，仅返回新的 access token
  */
 export type RefreshTokenResponse = {
     /**
@@ -62,7 +182,69 @@ export type RefreshTokenResponse = {
 };
 
 /**
+ * Role
+ *
+ * 角色模型类，用于定义系统中的用户角色。
+ *
+ * 该类继承自SQLModel，映射到数据库中的角色表。每个角色可以有多个用户和多个权限，
+ * 通过中间表UserRole和RolePermission实现多对多关系。
+ *
+ * Attributes:
+ * id: 角色的唯一标识符，主键，自增
+ * name: 角色名称，具有唯一性约束和索引，例如：admin, manager, operator, viewer
+ * description: 角色的描述信息，可选字段
+ * is_only_user: 标识该角色是否仅限单个用户使用，默认为False
+ * users: 与该角色关联的用户列表，通过UserRole中间表建立多对多关系
+ * permissions: 与该角色关联的权限列表，通过RolePermission中间表建立多对多关系
+ */
+export type Role = {
+    /**
+     * Id
+     */
+    id?: number | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Is Only User
+     */
+    is_only_user?: boolean;
+};
+
+/**
+ * RoleUpdate
+ *
+ * 角色更新请求模型类，用于接收角色更新时的参数。
+ *
+ * 该类继承自Pydantic的BaseModel，所有字段均为可选，允许部分更新角色信息。
+ *
+ * Attributes:
+ * name: 更新后的角色名称，可选字段
+ * description: 更新后的角色描述信息，可选字段
+ */
+export type RoleUpdate = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Description
+     */
+    description?: string | null;
+};
+
+/**
  * TodoCreate
+ *
+ * 创建Todo任务时使用的请求模型类。
+ *
+ * 继承自TodoBase，用于接收前端传入的新建任务数据。
+ * 不包含id字段，因为id由数据库自动生成。
  */
 export type TodoCreate = {
     /**
@@ -81,6 +263,14 @@ export type TodoCreate = {
 
 /**
  * TodoRead
+ *
+ * 读取Todo任务时使用的响应模型类。
+ *
+ * 继承自TodoBase，用于向客户端返回任务数据。
+ * 包含完整的任务信息，包括自动生成的id字段。
+ *
+ * Attributes:
+ * id: 任务唯一标识符，整数类型，必填字段
  */
 export type TodoRead = {
     /**
@@ -103,6 +293,16 @@ export type TodoRead = {
 
 /**
  * TodoUpdate
+ *
+ * 更新Todo任务时使用的请求模型类。
+ *
+ * 所有字段均为可选，允许部分更新任务信息。
+ * 只有提供的字段会被更新，未提供的字段保持原值。
+ *
+ * Attributes:
+ * title: 任务标题，可选字段
+ * description: 任务描述，可选字段
+ * completed: 任务完成状态，可选字段
  */
 export type TodoUpdate = {
     /**
@@ -123,6 +323,8 @@ export type TodoUpdate = {
  * TokenResponse
  *
  * Token 响应模型
+ *
+ * 用于登录接口返回 access token 和 refresh token
  */
 export type TokenResponse = {
     /**
@@ -149,6 +351,8 @@ export type TokenResponse = {
 
 /**
  * UploadResponse
+ *
+ * 图片上传响应数据模型
  */
 export type UploadResponse = {
     /**
@@ -168,7 +372,13 @@ export type UploadResponse = {
 /**
  * UserCreate
  *
- * 用户创建模型
+ * 用户创建请求模型
+ *
+ * 用于创建新用户时的数据验证和传输。
+ * 在UserBase基础上增加了密码字段。
+ *
+ * Attributes:
+ * password: 用户明文密码，用于创建时传入
  */
 export type UserCreate = {
     /**
@@ -203,6 +413,14 @@ export type UserCreate = {
 
 /**
  * UserLogin
+ *
+ * 用户登录请求模型
+ *
+ * 用于处理用户登录时的数据验证。
+ *
+ * Attributes:
+ * email: 用户邮箱地址
+ * password: 用户密码
  */
 export type UserLogin = {
     /**
@@ -218,7 +436,13 @@ export type UserLogin = {
 /**
  * UserRead
  *
- * 用户读取模型
+ * 用户读取响应模型
+ *
+ * 用于向客户端返回用户信息。
+ * 在UserBase基础上增加了用户ID字段。
+ *
+ * Attributes:
+ * id: 用户唯一标识符，UUID类型
  */
 export type UserRead = {
     /**
@@ -253,6 +477,14 @@ export type UserRead = {
 
 /**
  * Userlogout
+ *
+ * 用户登出响应模型
+ *
+ * 用于返回登出操作的结果。
+ *
+ * Attributes:
+ * code: 响应状态码，默认为200表示成功
+ * message: 响应消息，默认为"logout success"
  */
 export type Userlogout = {
     /**
@@ -628,6 +860,689 @@ export type UploadImageApiV1UploadImagePostResponses = {
 };
 
 export type UploadImageApiV1UploadImagePostResponse = UploadImageApiV1UploadImagePostResponses[keyof UploadImageApiV1UploadImagePostResponses];
+
+export type ListPermissionsApiV1PermissionsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Skip
+         */
+        skip?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Resource
+         */
+        resource?: string | null;
+    };
+    url: '/api/v1/permissions';
+};
+
+export type ListPermissionsApiV1PermissionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListPermissionsApiV1PermissionsGetError = ListPermissionsApiV1PermissionsGetErrors[keyof ListPermissionsApiV1PermissionsGetErrors];
+
+export type ListPermissionsApiV1PermissionsGetResponses = {
+    /**
+     * Response List Permissions Api V1 Permissions Get
+     *
+     * Successful Response
+     */
+    200: Array<Permission>;
+};
+
+export type ListPermissionsApiV1PermissionsGetResponse = ListPermissionsApiV1PermissionsGetResponses[keyof ListPermissionsApiV1PermissionsGetResponses];
+
+export type CreatePermissionApiV1PermissionsPostData = {
+    body: PermissionCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/permissions';
+};
+
+export type CreatePermissionApiV1PermissionsPostErrors = {
+    /**
+     * 权限名称已存在
+     */
+    400: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreatePermissionApiV1PermissionsPostError = CreatePermissionApiV1PermissionsPostErrors[keyof CreatePermissionApiV1PermissionsPostErrors];
+
+export type CreatePermissionApiV1PermissionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Permission;
+};
+
+export type CreatePermissionApiV1PermissionsPostResponse = CreatePermissionApiV1PermissionsPostResponses[keyof CreatePermissionApiV1PermissionsPostResponses];
+
+export type DeletePermissionApiV1PermissionsPermissionIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Permission Id
+         */
+        permission_id: number;
+    };
+    query?: never;
+    url: '/api/v1/permissions/{permission_id}';
+};
+
+export type DeletePermissionApiV1PermissionsPermissionIdDeleteErrors = {
+    /**
+     * 权限已被角色使用，无法删除
+     */
+    400: HttpError;
+    /**
+     * 权限不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeletePermissionApiV1PermissionsPermissionIdDeleteError = DeletePermissionApiV1PermissionsPermissionIdDeleteErrors[keyof DeletePermissionApiV1PermissionsPermissionIdDeleteErrors];
+
+export type DeletePermissionApiV1PermissionsPermissionIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetPermissionApiV1PermissionsPermissionIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Permission Id
+         */
+        permission_id: number;
+    };
+    query?: never;
+    url: '/api/v1/permissions/{permission_id}';
+};
+
+export type GetPermissionApiV1PermissionsPermissionIdGetErrors = {
+    /**
+     * 权限不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetPermissionApiV1PermissionsPermissionIdGetError = GetPermissionApiV1PermissionsPermissionIdGetErrors[keyof GetPermissionApiV1PermissionsPermissionIdGetErrors];
+
+export type GetPermissionApiV1PermissionsPermissionIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Permission;
+};
+
+export type GetPermissionApiV1PermissionsPermissionIdGetResponse = GetPermissionApiV1PermissionsPermissionIdGetResponses[keyof GetPermissionApiV1PermissionsPermissionIdGetResponses];
+
+export type UpdatePermissionApiV1PermissionsPermissionIdPutData = {
+    body: PermissionUpdate;
+    path: {
+        /**
+         * Permission Id
+         */
+        permission_id: number;
+    };
+    query?: never;
+    url: '/api/v1/permissions/{permission_id}';
+};
+
+export type UpdatePermissionApiV1PermissionsPermissionIdPutErrors = {
+    /**
+     * 权限不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdatePermissionApiV1PermissionsPermissionIdPutError = UpdatePermissionApiV1PermissionsPermissionIdPutErrors[keyof UpdatePermissionApiV1PermissionsPermissionIdPutErrors];
+
+export type UpdatePermissionApiV1PermissionsPermissionIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: Permission;
+};
+
+export type UpdatePermissionApiV1PermissionsPermissionIdPutResponse = UpdatePermissionApiV1PermissionsPermissionIdPutResponses[keyof UpdatePermissionApiV1PermissionsPermissionIdPutResponses];
+
+export type AssignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPostData = {
+    body?: never;
+    path: {
+        /**
+         * Permission Id
+         */
+        permission_id: number;
+        /**
+         * Role Id
+         */
+        role_id: number;
+    };
+    query?: never;
+    url: '/api/v1/permissions/{permission_id}/assign-to-role/{role_id}';
+};
+
+export type AssignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPostErrors = {
+    /**
+     * 权限已分配给角色
+     */
+    400: HttpError;
+    /**
+     * 角色或权限不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPostError = AssignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPostErrors[keyof AssignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPostErrors];
+
+export type AssignPermissionToRoleApiV1PermissionsPermissionIdAssignToRoleRoleIdPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UnbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPostData = {
+    body?: never;
+    path: {
+        /**
+         * Permission Id
+         */
+        permission_id: number;
+        /**
+         * Role Id
+         */
+        role_id: number;
+    };
+    query?: never;
+    url: '/api/v1/permissions/{permission_id}/unbind-from-role/{role_id}';
+};
+
+export type UnbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPostErrors = {
+    /**
+     * 角色不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPostError = UnbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPostErrors[keyof UnbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPostErrors];
+
+export type UnbindPermissionFromRoleApiV1PermissionsPermissionIdUnbindFromRoleRoleIdPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type AssignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPostData = {
+    body?: never;
+    path: {
+        /**
+         * Permission Id
+         */
+        permission_id: number;
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/permissions/{permission_id}/assign-to-user/{user_id}';
+};
+
+export type AssignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPostErrors = {
+    /**
+     * 用户或权限不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPostError = AssignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPostErrors[keyof AssignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPostErrors];
+
+export type AssignPermissionToUserApiV1PermissionsPermissionIdAssignToUserUserIdPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UnbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPostData = {
+    body?: never;
+    path: {
+        /**
+         * Permission Id
+         */
+        permission_id: number;
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/permissions/{permission_id}/unbind-from-user/{user_id}';
+};
+
+export type UnbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPostErrors = {
+    /**
+     * 用户或权限不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPostError = UnbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPostErrors[keyof UnbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPostErrors];
+
+export type UnbindPermissionFromUserApiV1PermissionsPermissionIdUnbindFromUserUserIdPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ListRolesApiV1RolesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Skip
+         */
+        skip?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/roles';
+};
+
+export type ListRolesApiV1RolesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRolesApiV1RolesGetError = ListRolesApiV1RolesGetErrors[keyof ListRolesApiV1RolesGetErrors];
+
+export type ListRolesApiV1RolesGetResponses = {
+    /**
+     * Response List Roles Api V1 Roles Get
+     *
+     * Successful Response
+     */
+    200: Array<Role>;
+};
+
+export type ListRolesApiV1RolesGetResponse = ListRolesApiV1RolesGetResponses[keyof ListRolesApiV1RolesGetResponses];
+
+export type CreateRoleApiV1RolesPostData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Name
+         */
+        name: string;
+        /**
+         * Description
+         */
+        description?: string | null;
+        /**
+         * Is Only User
+         */
+        is_only_user?: boolean;
+    };
+    url: '/api/v1/roles';
+};
+
+export type CreateRoleApiV1RolesPostErrors = {
+    /**
+     * 角色名称已存在
+     */
+    400: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateRoleApiV1RolesPostError = CreateRoleApiV1RolesPostErrors[keyof CreateRoleApiV1RolesPostErrors];
+
+export type CreateRoleApiV1RolesPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Role;
+};
+
+export type CreateRoleApiV1RolesPostResponse = CreateRoleApiV1RolesPostResponses[keyof CreateRoleApiV1RolesPostResponses];
+
+export type DeleteRoleApiV1RolesRoleIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Role Id
+         */
+        role_id: number;
+    };
+    query?: never;
+    url: '/api/v1/roles/{role_id}';
+};
+
+export type DeleteRoleApiV1RolesRoleIdDeleteErrors = {
+    /**
+     * 角色不为空，无法删除
+     */
+    400: HttpError;
+    /**
+     * 角色不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteRoleApiV1RolesRoleIdDeleteError = DeleteRoleApiV1RolesRoleIdDeleteErrors[keyof DeleteRoleApiV1RolesRoleIdDeleteErrors];
+
+export type DeleteRoleApiV1RolesRoleIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetRoleApiV1RolesRoleIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Role Id
+         */
+        role_id: number;
+    };
+    query?: never;
+    url: '/api/v1/roles/{role_id}';
+};
+
+export type GetRoleApiV1RolesRoleIdGetErrors = {
+    /**
+     * 角色不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRoleApiV1RolesRoleIdGetError = GetRoleApiV1RolesRoleIdGetErrors[keyof GetRoleApiV1RolesRoleIdGetErrors];
+
+export type GetRoleApiV1RolesRoleIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Role;
+};
+
+export type GetRoleApiV1RolesRoleIdGetResponse = GetRoleApiV1RolesRoleIdGetResponses[keyof GetRoleApiV1RolesRoleIdGetResponses];
+
+export type UpdateRoleApiV1RolesRoleIdPutData = {
+    body: RoleUpdate;
+    path: {
+        /**
+         * Role Id
+         */
+        role_id: number;
+    };
+    query?: never;
+    url: '/api/v1/roles/{role_id}';
+};
+
+export type UpdateRoleApiV1RolesRoleIdPutErrors = {
+    /**
+     * 角色不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateRoleApiV1RolesRoleIdPutError = UpdateRoleApiV1RolesRoleIdPutErrors[keyof UpdateRoleApiV1RolesRoleIdPutErrors];
+
+export type UpdateRoleApiV1RolesRoleIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: Role;
+};
+
+export type UpdateRoleApiV1RolesRoleIdPutResponse = UpdateRoleApiV1RolesRoleIdPutResponses[keyof UpdateRoleApiV1RolesRoleIdPutResponses];
+
+export type AssignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPostData = {
+    body?: never;
+    path: {
+        /**
+         * Role Id
+         */
+        role_id: number;
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/roles/{role_id}/assign-to-user/{user_id}';
+};
+
+export type AssignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPostErrors = {
+    /**
+     * 角色或用户不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPostError = AssignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPostErrors[keyof AssignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPostErrors];
+
+export type AssignRoleToUserApiV1RolesRoleIdAssignToUserUserIdPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UnbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPostData = {
+    body?: never;
+    path: {
+        /**
+         * Role Id
+         */
+        role_id: number;
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/roles/{role_id}/unbind-from-user/{user_id}';
+};
+
+export type UnbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPostErrors = {
+    /**
+     * 用户不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPostError = UnbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPostErrors[keyof UnbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPostErrors];
+
+export type UnbindRoleFromUserApiV1RolesRoleIdUnbindFromUserUserIdPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetRolePermissionsApiV1RolesRoleIdPermissionsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Role Id
+         */
+        role_id: number;
+    };
+    query?: never;
+    url: '/api/v1/roles/{role_id}/permissions';
+};
+
+export type GetRolePermissionsApiV1RolesRoleIdPermissionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRolePermissionsApiV1RolesRoleIdPermissionsGetError = GetRolePermissionsApiV1RolesRoleIdPermissionsGetErrors[keyof GetRolePermissionsApiV1RolesRoleIdPermissionsGetErrors];
+
+export type GetRolePermissionsApiV1RolesRoleIdPermissionsGetResponses = {
+    /**
+     * Response Get Role Permissions Api V1 Roles  Role Id  Permissions Get
+     *
+     * Successful Response
+     */
+    200: Array<unknown>;
+};
+
+export type GetRolePermissionsApiV1RolesRoleIdPermissionsGetResponse = GetRolePermissionsApiV1RolesRoleIdPermissionsGetResponses[keyof GetRolePermissionsApiV1RolesRoleIdPermissionsGetResponses];
+
+export type AssignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPostData = {
+    body?: never;
+    path: {
+        /**
+         * Role Id
+         */
+        role_id: number;
+        /**
+         * Permission Id
+         */
+        permission_id: number;
+    };
+    query?: never;
+    url: '/api/v1/roles/{role_id}/assign-permission/{permission_id}';
+};
+
+export type AssignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPostErrors = {
+    /**
+     * 权限已分配给角色
+     */
+    400: HttpError;
+    /**
+     * 角色或权限不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPostError = AssignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPostErrors[keyof AssignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPostErrors];
+
+export type AssignPermissionToRoleApiV1RolesRoleIdAssignPermissionPermissionIdPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UnbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPostData = {
+    body?: never;
+    path: {
+        /**
+         * Role Id
+         */
+        role_id: number;
+        /**
+         * Permission Id
+         */
+        permission_id: number;
+    };
+    query?: never;
+    url: '/api/v1/roles/{role_id}/unbind-permission/{permission_id}';
+};
+
+export type UnbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPostErrors = {
+    /**
+     * 角色不存在
+     */
+    404: HttpError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPostError = UnbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPostErrors[keyof UnbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPostErrors];
+
+export type UnbindPermissionFromRoleApiV1RolesRoleIdUnbindPermissionPermissionIdPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type RootGetData = {
     body?: never;

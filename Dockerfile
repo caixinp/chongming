@@ -1,7 +1,8 @@
-FROM debian:bookworm-slim AS builder
+# FROM debian:bookworm-slim AS builder
+FROM ubuntu:24.04 AS builder
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
+    apt-get install -y --no-install-recommends ca-certificates tzdata && \
     rm -rf /var/lib/apt/lists/*
 
 COPY build/chongming /tmp/chongming

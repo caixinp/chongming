@@ -1,6 +1,6 @@
 from .user import User
 from .role import Role, RoleUpdate
-from .permission import Permission
+from .permission import Permission, PermissionUpdate, PermissionCreate
 from .relationship_table import UserRole, RolePermission
 from .todo import Todo
 
@@ -10,6 +10,8 @@ __all__ = [
     "Role",
     "RoleUpdate",
     "Permission",
+    "PermissionUpdate",
+    "PermissionCreate",
     "UserRole",
     "RolePermission",
     "Todo",

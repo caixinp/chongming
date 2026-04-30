@@ -1,5 +1,6 @@
 from typing import Optional, List, TYPE_CHECKING
 
+from pydantic import BaseModel
 from sqlmodel import SQLModel, Field, Relationship
 
 from .relationship_table import RolePermission
@@ -34,3 +35,39 @@ class Permission(SQLModel, table=True):
     roles: List["Role"] = Relationship(
         back_populates="permissions", link_model=RolePermission
     )
+
+
+class PermissionUpdate(BaseModel):
+    """
+    权限更新请求模型类，用于接收权限更新时的参数。
+
+    所有字段均为可选，允许部分更新权限信息。
+
+    Attributes:
+        name: 更新后的权限名称，可选字段
+        description: 更新后的权限描述信息，可选字段
+        resource: 更新后的资源名称，可选字段
+        action: 更新后的操作类型，可选字段
+    """
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+    resource: Optional[str] = None
+    action: Optional[str] = None
+
+
+class PermissionCreate(BaseModel):
+    """
+    权限创建请求模型类，用于接收权限创建时的参数。
+
+    Attributes:
+        name: 权限名称，格式为"资源:操作"
+        description: 权限描述信息，可选字段
+        resource: 资源名称，如 user、order、product 等
+        action: 操作类型，如 create、read、update、delete 等
+    """
+
+    name: str
+    description: Optional[str] = None
+    resource: str
+    action: str
