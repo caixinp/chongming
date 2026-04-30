@@ -4,6 +4,7 @@
 FastAPI chongming 示例
 主入口文件，适配 chongming 打包系统
 """
+import os
 import sys
 import platform
 from utils.launch import launch
@@ -37,7 +38,9 @@ def app_run(app_config: dict, default_config: dict):
     # 打包环境强制禁用重载
     is_frozen = getattr(sys, "frozen", False)
     reload = False if is_frozen else server_config.get("reload", False)
-    workers = server_config.get("workers", 4)
+    # 支持通过环境变量 APP_WORKERS 覆盖 worker 数量（方便嵌入式设备调优）
+    default_workers = server_config.get("workers", 4)
+    workers = int(os.environ.get("APP_WORKERS", str(default_workers)))
 
     # 显示启动信息
     env = app_config.get("env", "development")

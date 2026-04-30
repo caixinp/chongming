@@ -302,7 +302,7 @@ async def init_database():
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from ..app.core.config import get_config
-    from ..app.task.dev_init_db import init_permission, dev_init_admin
+    from ..app.task.dev_init_db import init_permission, init_default_roles, dev_init_admin
 
     database = get_config()["database"]
     database_type = database["type"]
@@ -333,6 +333,9 @@ async def init_database():
     async with async_session_maker() as session:
         # await UserService.create_user(session, "admin", "admin", is_superuser=True)  # type: ignore
         await init_permission(session)
+        # 再初始化默认角色及权限关联
+        await init_default_roles(session)
+        # 最后初始化管理员用户
         await dev_init_admin(session)
 
 

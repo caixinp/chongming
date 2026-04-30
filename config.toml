@@ -67,6 +67,9 @@ host = "0.0.0.0"
 port = 8000
 reload = false
 workers = 4
+# 对于嵌入式设备（如 BM1684），建议启用环境变量覆盖：
+# docker run -e APP_WORKERS=2 ...
+# 可减少线程数，避免 "can't start new thread" 错误
 
 [production.logging]
 backup_count = 5 # 最多保存 10 个日志文件

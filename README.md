@@ -77,7 +77,7 @@ chongming/
 ### 运行原理
 
 开发时通过 `uv run serve` 直接启动 uvicon。
-打包后，`chongming` 可执行文件内嵌了经过混淆的引导程序，引导程序从加密的 Module-Bank 文件 (`app.mbank`, `plugins.mbank`) 中动态加载应用模块，同时从 SQLite VFS (`static.svfs`) 提供前端静态文件。所有 Python 业务代码不暴露与明文磁盘。
+打包后，`chongming` 可执行文件内嵌了经过混淆的引导程序，引导程序从加密的 Module-Bank 文件 (`app.mbank`, `plugins.mbank`) 中动态加载应用模块，同时从 SQLite VFS (`static.svfs`) 提供前端静态文件。所有 Python 业务代码不暴露于明文磁盘。
 
 ---
 
@@ -197,12 +197,23 @@ build/
 
 ## Docker 部署
 
-Docker 镜像采用多角度构建 + `scratch` 基础镜像，真正做到最小化。
+Docker 镜像采用多阶段构建 + `scratch` 基础镜像，真正做到最小化。同时支持 **x86_64** 与 **aarch64 (ARM64)** 双架构。
 
 ### 构建镜像
 
 ```bash
+# 默认构建 x86_64 架构
 docker build -t chongming:latest .
+
+# 在 ARM64 设备上构建
+docker build --build-arg TARGETARCH=aarch64 -t chongming:arm64 .
+
+# 使用 Docker Buildx 构建多架构镜像（推送到仓库）
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --build-arg TARGETARCH \
+  -t your-registry/chongming:latest \
+  --push .
 ```
 
 ### 执行部署脚本

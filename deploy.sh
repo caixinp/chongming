@@ -12,8 +12,25 @@ log_info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# 配置
-IMAGE="chongming:latest"
+# 检测架构
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64|amd64)
+        DEFAULT_IMAGE="chongming:latest"
+        ARCH_FLAG="x86_64"
+        ;;
+    aarch64|arm64)
+        DEFAULT_IMAGE="chongming:arm64"
+        ARCH_FLAG="aarch64"
+        ;;
+    *)
+        log_error "不支持的架构: $ARCH"
+        exit 1
+        ;;
+esac
+
+# 配置：可通过环境变量覆盖镜像标签，例如: IMAGE=chongming:arm64 ./deploy.sh
+IMAGE="${IMAGE:-$DEFAULT_IMAGE}"
 CONTAINER="chongming"
 PORT=8000
 DATA_DIR="${HOME}/chongming-data"
@@ -60,13 +77,27 @@ if ss -tlnp | grep -q ":${PORT}"; then
     exit 1
 fi
 
+# 根据架构设置默认 worker 数
+case "$ARCH" in
+    aarch64|arm64)
+        DEFAULT_WORKERS=2
+        ;;
+    *)
+        DEFAULT_WORKERS=4
+        ;;
+esac
+
 # 4. 启动容器
 log_info "启动容器..."
+log_info "架构: $ARCH, workers: ${APP_WORKERS:-$DEFAULT_WORKERS}, 端口: $PORT"
 docker run -d \
     -p "$PORT:8000" \
     -v "$DATA_DIR/data:/app/data" \
     -v "$DATA_DIR/uploads:/app/uploads" \
     -v "$DATA_DIR/logs:/app/logs" \
+    -e "APP_WORKERS=${APP_WORKERS:-$DEFAULT_WORKERS}" \
+    --ulimit nproc=65535 \
+    --ulimit nofile=65535 \
     --restart unless-stopped \
     --name "$CONTAINER" \
     "$IMAGE"
