@@ -14,10 +14,10 @@ import { useAuthStore } from './stores/auth'
 /**
  * 打包时取消该注释
  */
-// import { client } from "./api/generated/client.gen"
-// client.setConfig({
-//     baseUrl: "/"
-// })
+import { client } from "./api/generated/client.gen"
+client.setConfig({
+    baseUrl: "/"
+})
 
 const app = createApp(App)
 
