@@ -1,0 +1,49 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[project]
+dependencies = [
+  "fastapi[uvicorn]",
+  "gunicorn",
+  "module-bank",
+  "tomli",
+  "typing-extensions",
+  "uvicorn",
+  "nats-py",
+  "chongming-cache",
+  "chongming-lock",
+  "chongming-logging",
+  "chongming-config",
+]
+description = ""
+name = "chongming_gateway"
+readme = "README.md"
+requires-python = ">=3.12"
+version = "0.1.0"
+
+[[tool.uv.index]]
+url = "https://mirrors.ustc.edu.cn/pypi/web/simple/"
+
+[tool.uv.sources]
+chongming-cache = { path = "../utils/cache" }
+chongming-lock = { path = "../utils/lock" }
+chongming-logging = { path = "../utils/logging" }
+chongming-config = { path = "../utils/config" }
+
+[dependency-groups]
+dev = [
+  "nuitka>=4.0.8",
+  "pyarmor",
+  "pyinstaller",
+  "ruff>=0.15.10",
+  "zstandard>=0.23.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chongming_gateway"]
+
+[project.scripts]
+build = "chongming_gateway.scripts.build:build"
+serve = "chongming_gateway:serve"
+gunicorn = "chongming_gateway:gunicorn_serve"

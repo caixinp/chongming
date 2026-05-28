@@ -1,0 +1,148 @@
+# 自定义网络，所有服务加入
+networks:
+  microservices-net:
+    driver: bridge
+
+# 持久化数据卷
+volumes:
+  nats1-data:
+  nats2-data:
+  nats3-data:
+  pg-master-data:
+  pg-slave-data:
+  minio1-data:
+  minio2-data:
+
+services:
+  # ========== NATS 集群（3节点） ==========
+  nats-1:
+    image: nats:2.10-alpine
+    container_name: nats-1
+    command: ["-c", "/etc/nats/nats.conf"]
+    volumes:
+      - ./nats-1.conf:/etc/nats/nats.conf:ro
+      - nats1-data:/data
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    networks:
+      - microservices-net
+
+  nats-2:
+    image: nats:2.10-alpine
+    container_name: nats-2
+    command: ["-c", "/etc/nats/nats.conf"]
+    volumes:
+      - ./nats-2.conf:/etc/nats/nats.conf:ro
+      - nats2-data:/data
+    ports:
+      - "4223:4222"
+    networks:
+      - microservices-net
+
+  nats-3:
+    image: nats:2.10-alpine
+    container_name: nats-3
+    command: ["-c", "/etc/nats/nats.conf"]
+    volumes:
+      - ./nats-3.conf:/etc/nats/nats.conf:ro
+      - nats3-data:/data
+    ports:
+      - "4224:4222"
+    networks:
+      - microservices-net
+
+  # ========== PostgreSQL 主备（使用 repmgr 自动故障转移） ==========
+  # 主节点
+  pg-master:
+    image: bitnamilegacy/postgresql-repmgr:16
+    container_name: pg-master
+    environment:
+      - POSTGRESQL_POSTGRES_PASSWORD=admin123
+      - POSTGRESQL_USERNAME=myuser
+      - POSTGRESQL_PASSWORD=mypassword
+      - POSTGRESQL_DATABASE=mydb
+      - REPMGR_PASSWORD=repmgrpass
+      - REPMGR_PRIMARY_HOST=pg-master
+      - REPMGR_PRIMARY_PORT=5432
+      - REPMGR_PARTNER_NODES=pg-master,pg-slave
+      - REPMGR_NODE_NAME=pg-master-1
+      - REPMGR_NODE_ID=1
+      - REPMGR_NODE_NETWORK_NAME=pg-master
+      - REPMGR_PORT_NUMBER=5432
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-master-data:/bitnami/postgresql
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "myuser", "-d", "mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 备节点
+  pg-slave:
+    image: bitnamilegacy/postgresql-repmgr:16
+    container_name: pg-slave
+    depends_on:
+      pg-master:
+        condition: service_healthy
+    environment:
+      - POSTGRESQL_POSTGRES_PASSWORD=admin123
+      - POSTGRESQL_USERNAME=myuser
+      - POSTGRESQL_PASSWORD=mypassword
+      - POSTGRESQL_DATABASE=mydb
+      - REPMGR_PASSWORD=repmgrpass
+      - REPMGR_PRIMARY_HOST=pg-master
+      - REPMGR_PRIMARY_PORT=5432
+      - REPMGR_PARTNER_NODES=pg-master,pg-slave
+      - REPMGR_NODE_NAME=pg-slave-1
+      - REPMGR_NODE_ID=2
+      - REPMGR_NODE_NETWORK_NAME=pg-slave
+      - REPMGR_PORT_NUMBER=5432
+    ports:
+      - "5433:5432"   # 对外暴露不同端口避免冲突
+    volumes:
+      - pg-slave-data:/bitnami/postgresql
+    networks:
+      - microservices-net
+
+  # ========== MinIO 分布式集群（2节点，擦除编码） ==========
+  minio-1:
+    image: minio/minio:latest
+    container_name: minio-1
+    command: server --console-address ":9001" http://minio-{1...2}/data
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio1-data:/data
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  minio-2:
+    image: minio/minio:latest
+    container_name: minio-2
+    command: server --console-address ":9001" http://minio-{1...2}/data
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    volumes:
+      - minio2-data:/data
+    networks:
+      - microservices-net
+    depends_on:
+      - minio-1

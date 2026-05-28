@@ -1,0 +1,81 @@
+[worker]
+name = "example"
+version = "0.1.0"
+description = "chongming worker example"
+
+[nats]
+urls = [
+    "nats://localhost:4222",
+    "nats://localhost:4223",
+    "nats://localhost:4224"
+]
+
+[registration]
+type = "register"
+service = "calc"
+queue_group = "calc-workers"  # Queue Group 名称，同 group 的 worker 实现负载均衡
+router_prefix = "/calc"
+tags = ["calculator"]
+heartbeat_interval = 15  # 心跳间隔（秒），TTL 必须大于此值
+items = [
+    {
+        subject = "calc.add",
+        method = "GET",
+        path = "/add",
+        summary = "Add two numbers",
+        docstring = "Add two numbers and return result with metadata",
+        params = ["a", "b"],
+        ttl = 30,
+        timeout = 2.0,
+        response_model = {
+            result = ["float", "__required__"],
+            operation = ["str", "add"],
+            timestamp = ["float", 0.0]
+        }
+    },
+    {
+        subject = "calc.subtract",
+        method = "GET",
+        path = "/subtract",
+        summary = "Subtract two numbers",
+        docstring = "Subtract b from a and return result with metadata",
+        params = ["a", "b"],
+        ttl = 30,
+        timeout = 2.0,
+        response_model = {
+            result = ["float", "__required__"],
+            operation = ["str", "subtract"],
+            timestamp = ["float", 0.0]
+        }
+    },
+    {
+        subject = "calc.multiply",
+        method = "GET",
+        path = "/multiply",
+        summary = "Multiply two numbers",
+        docstring = "Multiply two numbers and return result with metadata",
+        params = ["a", "b"],
+        ttl = 30,
+        timeout = 2.0,
+        response_model = {
+            result = ["float", "__required__"],
+            operation = ["str", "multiply"],
+            timestamp = ["float", 0.0]
+        }
+    },
+    {
+        subject = "calc.divide",
+        method = "GET",
+        path = "/divide",
+        summary = "Divide two numbers",
+        docstring = "Divide a by b and return result with metadata",
+        params = ["a", "b"],
+        ttl = 30,
+        timeout = 2.0,
+        response_model = {
+            result = ["float", "__required__"],
+            operation = ["str", "divide"],
+            timestamp = ["float", 0.0]
+        }
+    }
+]

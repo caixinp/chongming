@@ -1,0 +1,22 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[project]
+name = "chongming-worker"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chongming-config",
+    "chongming-logging",
+    "nats-py",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chongming_worker"]
+
+[tool.uv.sources]
+chongming-config = { path = "../config" }
+chongming-logging = { path = "../logging" }

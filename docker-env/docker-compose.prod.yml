@@ -1,0 +1,173 @@
+# =============================================
+# Production Override for docker-compose.yml
+# =============================================
+# 在基础开发环境上叠加生产级部署组件：
+#   - API Gateway（Python 运行时 或 二进制模式任选）
+#   - Nginx 反向代理/负载均衡网关
+#   - Workers（Python 运行时 或 二进制模式任选）
+#
+# 使用方式（Python 运行时模式，适合开发/CI）：
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# 使用方式（二进制模式，适合生产，镜像小 90%）：
+#   chongming binary-build gateway --tag chongming/gateway-binary:latest
+#   chongming binary-build example --tag chongming/example-binary:latest
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# 构建模式对比：
+#   docker-build     → Python 运行时，~200MB，构建快 ~15s，适合开发/CI
+#   binary-build     → 单二进制，~20MB，构建慢 ~60s，适合生产部署
+#
+# 生产配置文件来源：
+#   所有组件（gateway、workers）的生产配置均存放在 public/ 目录下：
+#     api_gateway/public/gateway-config.toml
+#     workers/<name>/public/config.toml
+#   Dockerfile 构建时会自动将这些生产配置编译进镜像。
+#   如需覆盖配置，可通过 volumes 挂载自定义 config.toml。
+# =============================================
+
+services:
+  # ========== API 网关（双实例负载均衡） ==========
+  #
+  # 方案 A（默认）：Python 运行时模式（docker-build）
+  #   镜像较大 ~300MB，但构建快，适合开发调试
+  #   生产配置来自: api_gateway/public/gateway-config.toml
+  #
+  # 方案 B（推荐生产）：二进制模式（binary-build）
+  #   先用 chongming binary-build gateway --push 构建并推送二进制镜像
+  #   然后将下方 image 改为 chongming/gateway-binary:latest，注释掉 build
+  #
+  # 覆盖配置（按需）：
+  #   volumes:
+  #     - ./custom-gateway-config.toml:/app/config/config.toml:ro
+  #
+  api-gateway-1:
+    # 方案 A: Python 运行时（取消注释 build，注释 image）
+    # build:
+    #   context: ..
+    #   dockerfile: docker-env/gateway.Dockerfile
+    # 方案 B: 二进制模式（取消注释 image，注释 build）
+    image: chongming/gateway-binary:latest
+    container_name: api-gateway-1
+    depends_on:
+      nats-1:
+        condition: service_started
+      nats-2:
+        condition: service_started
+      nats-3:
+        condition: service_started
+    environment:
+      - NATS_SERVERS=nats://nats-1:4222,nats://nats-2:4222,nats://nats-3:4222
+    networks:
+      - microservices-net
+    restart: unless-stopped
+
+  api-gateway-2:
+    # 方案 A: Python 运行时
+    # build:
+    #   context: ..
+    #   dockerfile: docker-env/gateway.Dockerfile
+    # 方案 B: 二进制模式
+    image: chongming/gateway-binary:latest
+    container_name: api-gateway-2
+    depends_on:
+      nats-1:
+        condition: service_started
+      nats-2:
+        condition: service_started
+      nats-3:
+        condition: service_started
+    environment:
+      - NATS_SERVERS=nats://nats-1:4222,nats://nats-2:4222,nats://nats-3:4222
+    networks:
+      - microservices-net
+    restart: unless-stopped
+
+  # ========== Nginx 网关（前端 + API 反向代理） ==========
+  # 功能：
+  #   1. 提供 Vue SPA 前端静态资源
+  #   2. 反向代理 /api/ 请求到后端 Gateway 集群（负载均衡）
+  #   3. SPA 路由回退（所有非 API 请求返回 index.html）
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker-env/frontend.Dockerfile
+    image: chongming/frontend:latest
+    container_name: frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api-gateway-1
+      - api-gateway-2
+    networks:
+      - microservices-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+# =============================================
+# Worker 部署示例（取消注释并使用）
+# =============================================
+# 以下 worker 服务默认注释，按需取消注释。
+# 选择 Python 运行时模式 或 二进制模式。
+#
+# 先通过 CLI 构建镜像：
+#   方案 A: chongming docker-build example
+#   方案 B: chongming binary-build example --tag chongming/example-binary:latest --push
+#
+# 生产配置来自: workers/<name>/public/config.toml
+# 覆盖配置（按需）：
+#   volumes:
+#     - ./custom-worker-config.toml:/app/config.toml:ro
+# =============================================
+
+  # ===== example-worker =====
+  # example-worker:
+  #   # 方案 A: Python 运行时模式
+  #   build:
+  #     context: ..
+  #     dockerfile: docker-env/worker.Dockerfile
+  #     args:
+  #       WORKER_NAME: example
+  #   # 方案 B: 二进制模式（取消注释 image，注释 build）
+  #   # image: chongming/example-binary:latest
+  #   container_name: example-worker
+  #   restart: unless-stopped
+  #   networks:
+  #     - microservices-net
+  #   depends_on:
+  #     nats-1:
+  #       condition: service_started
+  #     nats-2:
+  #       condition: service_started
+  #     nats-3:
+  #       condition: service_started
+  #   environment:
+  #     - NATS_SERVERS=nats://nats-1:4222,nats://nats-2:4222,nats://nats-3:4222
+
+  # ===== testworker =====
+  # testworker:
+  #   build:
+  #     context: ..
+  #     dockerfile: docker-env/worker.Dockerfile
+  #     args:
+  #       WORKER_NAME: testworker
+  #   # image: chongming/testworker-binary:latest
+  #   container_name: testworker
+  #   restart: unless-stopped
+  #   networks:
+  #     - microservices-net
+  #   depends_on:
+  #     nats-1:
+  #       condition: service_started
+  #     nats-2:
+  #       condition: service_started
+  #     nats-3:
+  #       condition: service_started
+  #   environment:
+  #     - NATS_SERVERS=nats://nats-1:4222,nats://nats-2:4222,nats://nats-3:4222
+  #   volumes:
+  #     - ./workers/testworker/config.toml:/app/config.toml:ro

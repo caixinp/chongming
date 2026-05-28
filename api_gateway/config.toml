@@ -1,0 +1,16 @@
+[default]
+debug = true
+description = ""
+name = "chongming-gateway"
+version = "v0.1.0"
+env = "development"
+prefix = "/api/v1"
+
+[nats]
+urls = ["nats://localhost:4222", "nats://localhost:4223", "nats://localhost:4224"]
+
+[database]
+type = "pgsql"
+
+[cleanup]
+interval = 10  # 过期路由清理检查间隔（秒），TTL 必须大于此值

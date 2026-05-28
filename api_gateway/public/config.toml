@@ -1,0 +1,16 @@
+[default]
+debug = false
+description = "chongming-gateway (Docker)"
+name = "chongming-gateway"
+version = "v0.1.0"
+env = "production"
+prefix = "/api/v1"
+
+[nats]
+urls = ["nats://nats-1:4222", "nats://nats-2:4222", "nats://nats-3:4222"]
+
+[database]
+type = "pgsql"
+
+[cleanup]
+interval = 10

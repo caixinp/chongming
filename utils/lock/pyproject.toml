@@ -1,0 +1,26 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[project]
+name = "chongming-lock"
+version = "0.1.0"
+description = "基于 NATS JetStream KV 的分布式锁库 - Mutex, RWLock, Semaphore, Reentrant, Lease, FencingToken"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chongming-config",
+    "chongming-cache",
+    "nats-py>=2.14.0",
+]
+
+[[tool.uv.index]]
+default = true
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+[tool.uv.sources]
+chongming-config = { path = "../config" }
+chongming-cache = { path = "../cache" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chongming_lock"]

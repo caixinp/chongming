@@ -1,0 +1,17 @@
+[project]
+name = "chongming"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chongming-cli",
+]
+
+[tool.uv.workspace]
+members = [
+    "cli",
+]
+
+[tool.uv.sources]
+chongming-cli = { workspace = true }

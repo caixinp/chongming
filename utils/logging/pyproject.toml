@@ -1,0 +1,18 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[project]
+name = "chongming-logging"
+version = "0.1.0"
+description = "chongming 日志工具包 - 自动配置 INFO 级别日志输出到 stdout"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[[tool.uv.index]]
+default = true
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chongming_logging"]
