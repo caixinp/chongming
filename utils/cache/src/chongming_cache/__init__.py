@@ -112,7 +112,7 @@ class ChongmingCache:
         if os.path.exists("config.toml"):
             self._config: Config = load_config("config.toml")
         else:
-            self._config = {"nats": {"urls": [DEFAULT_NATS_URL]}}  # 默认配置，适合本地开发
+            self._config = {"nats": {"urls": [DEFAULT_NATS_URL]}}  # 默认配置，适合本地开发  # type: ignore
         self._bucket_name = bucket
 
         # 优先使用传入的 nats_url，否则从配置中读取
@@ -122,7 +122,7 @@ class ChongmingCache:
             urls = self._config.get("nats", {}).get("urls", [DEFAULT_NATS_URL])
             self._nats_url = urls[0] if urls else DEFAULT_NATS_URL
 
-        self._nc: nats.NATS | None = None
+        self._nc: nats.NATS | None = None # type: ignore
         self._js: JetStreamContext | None = None
         self._kv: KeyValue | None = None
 
@@ -169,7 +169,7 @@ class ChongmingCache:
         注意 ``put()`` 是 upsert 语义：无论键是否存在都会写入。
         如需"仅创建不存在"（create-if-not-exists），请使用 ``create()``。
         """
-        entry = await self._kv.put(key, value)
+        entry = await self._kv.put(key, value) # type: ignore
         self.logger.debug("✏️  写入 %s = %s (版本 %d)", key, value, entry)
         return entry
 
@@ -184,14 +184,14 @@ class ChongmingCache:
             # 只有一个进程会创建成功，其余收到异常
             rev = await cache.create("app.lock", b"init")
         """
-        entry = await self._kv.create(key, value)
+        entry = await self._kv.create(key, value) # type: ignore
         self.logger.info("🆕 创建 %s = %s (版本 %d)", key, value, entry)
         return entry
 
     async def get(self, key: str) -> Optional[KeyValue.Entry]:
         """获取指定键的值，不存在返回 None"""
         try:
-            entry = await self._kv.get(key)
+            entry = await self._kv.get(key) # type: ignore
             return entry
         except (KeyWrongLastSequenceError, nats.js.errors.Error):
             return None
@@ -203,7 +203,7 @@ class ChongmingCache:
         revision 不匹配时会抛出 ``KeyWrongLastSequenceError``。
         请配合 ``cas_update()`` 或 ``@cas_retry`` 使用。
         """
-        entry = await self._kv.update(key, value, revision)
+        entry = await self._kv.update(key, value, revision) # type: ignore
         return entry
 
     async def cas_update(
@@ -232,7 +232,7 @@ class ChongmingCache:
                     # 键不存在，直接 put（相当于创建）
                     return await self.put(key, new_value)
                 else:
-                    return await self.update(key, new_value, entry.revision)
+                    return await self.update(key, new_value, entry.revision) # type: ignore
             except (KeyWrongLastSequenceError, BadRequestError) as e:
                 last_exc = e
                 if attempt < max_retries - 1:
@@ -242,18 +242,18 @@ class ChongmingCache:
 
     async def delete(self, key: str) -> None:
         """删除指定键"""
-        await self._kv.delete(key)
+        await self._kv.delete(key) # type: ignore
         self.logger.debug("🗑️  删除键: %s", key)
 
     async def purge(self, key: str) -> None:
         """彻底清除键的所有历史记录"""
-        await self._kv.purge(key)
+        await self._kv.purge(key) # type: ignore
         self.logger.debug("🧹 清除键的所有历史: %s", key)
 
     async def exists(self, key: str) -> bool:
         """检查键是否存在"""
         try:
-            await self._kv.get(key)
+            await self._kv.get(key) # type: ignore
             return True
         except (KeyWrongLastSequenceError, nats.js.errors.Error):
             return False
@@ -270,7 +270,7 @@ class ChongmingCache:
 
     async def keys(self) -> list[str]:
         """列出桶中所有键（返回快照集）"""
-        return await self._kv.keys()
+        return await self._kv.keys() # type: ignore
 
     # ── 监听 & 历史 ─────────────────────────────────────────
 
@@ -285,13 +285,13 @@ class ChongmingCache:
                 async for change in watcher:
                     print(f"{change.key} = {change.value}")
         """
-        watcher = await self._kv.watch(key)
+        watcher = await self._kv.watch(key) # type: ignore
         try:
             while True:
                 entry = await watcher.updates()
                 if entry is None:
                     break
-                yield entry
+                yield entry # type: ignore
         finally:
             await watcher.stop()
 
@@ -322,7 +322,7 @@ class ChongmingCache:
               默认 False，仅监听后续变更
         :returns: asyncio.Task 对象，可用于后续取消监听
         """
-        watcher = await self._kv.watch(key)
+        watcher = await self._kv.watch(key) # type: ignore
 
         async def _listen():
             try:
@@ -336,7 +336,7 @@ class ChongmingCache:
                         # 第一个非 None 的条目是初始快照，跳过
                         skip_snapshot = False
                         continue
-                    await callback(entry)
+                    await callback(entry) # type: ignore
             except asyncio.CancelledError:
                 pass  # 外部调用 task.cancel() 时正常退出
             finally:
@@ -347,7 +347,7 @@ class ChongmingCache:
 
     async def history(self, key: str) -> Sequence[KeyValue.Entry]:
         """获取指定键的历史版本列表"""
-        return await self._kv.history(key)
+        return await self._kv.history(key) # type: ignore
 
     # ── 桶管理 ──────────────────────────────────────────────
 
@@ -409,17 +409,17 @@ async def _demo() -> None:
         # 读取
         entry = await cache.get("feature.flag")
         if entry:
-            logger.info("feature.flag = %s (版本 %d)", entry.value.decode(), entry.revision)
+            logger.info("feature.flag = %s (版本 %d)", entry.value.decode(), entry.revision) # type: ignore
 
         # 带版本号的更新（CAS）
         current = await cache.get("timeout.sec")
         if current:
-            await cache.update("timeout.sec", b"60", current.revision)
+            await cache.update("timeout.sec", b"60", current.revision) # type: ignore
             logger.info("✅ timeout.sec 已更新为 60")
 
         # subscribe 后台持续监听，写入新值自动触发回调
         async def on_flag_change(entry: KeyValue.Entry):
-            logger.info("🔔 收到变更: %s = %s (版本 %d)", entry.key, entry.value.decode(), entry.revision)
+            logger.info("🔔 收到变更: %s = %s (版本 %d)", entry.key, entry.value.decode(), entry.revision) # type: ignore
 
         sub_task = await cache.subscribe("feature.flag", on_flag_change)
         logger.info("👂 已订阅 feature.flag，写入新值看效果...")
@@ -434,7 +434,7 @@ async def _demo() -> None:
         # 历史版本
         logger.info("📜 feature.flag 的历史版本:")
         for entry in await cache.history("feature.flag"):
-            logger.info("   版本 %d: %s", entry.revision, entry.value.decode())
+            logger.info("   版本 %d: %s", entry.revision, entry.value.decode()) # type: ignore
 
         # 删除
         await cache.delete("feature.flag")
@@ -460,7 +460,7 @@ async def _demo() -> None:
 
         entry = await cache.get("myapp.config.refresh_interval")
         if entry:
-            logger.info("读取到: %s = %s", entry.key, entry.value.decode())
+            logger.info("读取到: %s = %s", entry.key, entry.value.decode()) # type: ignore
 
         # 批量写入
         revs = await cache.put_batch({
@@ -530,7 +530,7 @@ async def _demo() -> None:
         if entry is None:
             await cache.put("debug.mode", value)
         else:
-            await cache.update("debug.mode", value, entry.revision)
+            await cache.update("debug.mode", value, entry.revision) # type: ignore
 
     async with ChongmingCache(logger, bucket="demo_retry") as cache:
         await atomic_set_debug(cache, b"true")
@@ -561,7 +561,7 @@ async def _demo() -> None:
 
             final = await c.get("shared.counter")
             if final:
-                logger.info("✅ 最终 shared.counter = %s (版本 %d)", final.value.decode(), final.revision)
+                logger.info("✅ 最终 shared.counter = %s (版本 %d)", final.value.decode(), final.revision) # type: ignore
 
     logger.info("")
     logger.info("🎉 演示结束 — ChongmingCache 支持两种使用方式，且天然多进程安全！")

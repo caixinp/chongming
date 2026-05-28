@@ -71,7 +71,7 @@ class MutexLock(ChongmingLock):
         if entry is None:
             return False
 
-        data = self._parse_lock_data(entry.value)
+        data = self._parse_lock_data(entry.value) # type: ignore
         if data is None:
             return False
 
@@ -88,7 +88,7 @@ class MutexLock(ChongmingLock):
         lock_data = self._build_lock_data()
         try:
             self._revision = await self._cache.update(
-                self._lock_key, lock_data, entry.revision
+                self._lock_key, lock_data, entry.revision # type: ignore
             )
             self._owner_data = lock_data
             logger.info(

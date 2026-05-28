@@ -20,15 +20,31 @@ def _list_workers():
         for name in sorted(os.listdir(WORKERS_DIR)):
             worker_dir = os.path.join(WORKERS_DIR, name)
             main_py = os.path.join(worker_dir, "main.py")
-            if os.path.isdir(worker_dir) and not name.startswith(".") and os.path.isfile(main_py):
+            cargo_toml = os.path.join(worker_dir, "Cargo.toml")
+            main_rs = os.path.join(worker_dir, "src", "main.rs")
+
+            # Rust worker: 有 Cargo.toml + src/main.rs
+            is_rust = os.path.isfile(cargo_toml) and os.path.isfile(main_rs)
+            # Python worker: 有 main.py
+            is_python = os.path.isfile(main_py)
+
+            if os.path.isdir(worker_dir) and not name.startswith(".") and (is_python or is_rust):
                 workers.append(name)
     return workers
 
 
+def _is_rust_worker(name: str) -> bool:
+    """检测 worker 是否为 Rust 项目（通过 Cargo.toml + main.rs 判断）"""
+    worker_dir = os.path.join(WORKERS_DIR, name)
+    return os.path.isfile(os.path.join(worker_dir, "Cargo.toml")) and \
+           os.path.isfile(os.path.join(worker_dir, "src", "main.rs"))
+
+
 def _ensure_worker_exists(name: str):
-    """验证 worker 目录和 main.py 存在"""
+    """验证 worker 目录和入口文件存在"""
     worker_dir = os.path.join(WORKERS_DIR, name)
     main_py = os.path.join(worker_dir, "main.py")
+    is_rust = _is_rust_worker(name)
 
     if not os.path.isdir(worker_dir):
         print(f"错误：找不到 worker '{name}'，目录不存在：{worker_dir}")
@@ -39,7 +55,7 @@ def _ensure_worker_exists(name: str):
                 print(f"  - {w}")
         sys.exit(1)
 
-    if not os.path.isfile(main_py):
+    if not is_rust and not os.path.isfile(main_py):
         print(f"错误：worker '{name}' 缺少 main.py 入口文件：{main_py}")
         sys.exit(1)
 
@@ -47,11 +63,23 @@ def _ensure_worker_exists(name: str):
 def _start_worker(name: str, background: bool = False):
     """启动单个 worker"""
     worker_dir = os.path.join(WORKERS_DIR, name)
+    is_rust = _is_rust_worker(name)
 
-    cmd = ["uv", "run", "--directory", f"workers/{name}", "python", "main.py"]
+    if is_rust:
+        # Rust worker: 使用 cargo run，传递 config 路径参数
+        config_path = os.path.join(worker_dir, "config.toml")
+        cmd = [
+            "cargo", "run", "--manifest-path", os.path.join(worker_dir, "Cargo.toml"),
+            "--", config_path
+        ]
+        worker_type = "Rust"
+    else:
+        # Python worker: 使用 uv run
+        cmd = ["uv", "run", "--directory", f"workers/{name}", "python", "main.py"]
+        worker_type = "Python"
 
     if background:
-        print(f"  正在启动 worker [{name}]（后台）...")
+        print(f"  正在启动 {worker_type} worker [{name}]（后台）...")
         process = subprocess.Popen(
             cmd,
             cwd=PROJECT_ROOT,
@@ -61,11 +89,16 @@ def _start_worker(name: str, background: bool = False):
         print(f"  PID: {process.pid}")
         return process
     else:
-        print(f"  正在启动 worker [{name}] ...")
+        print(f"  正在启动 {worker_type} worker [{name}] ...")
         print(f"  命令: {' '.join(cmd)}")
         print()
 
-        result = subprocess.run(cmd, cwd=PROJECT_ROOT)
+        try:
+            result = subprocess.run(cmd, cwd=PROJECT_ROOT)
+        except KeyboardInterrupt:
+            print()  # 换行，避免 ^C 破坏输出格式
+            print(f"worker '{name}' 已停止。")
+            sys.exit(0)
 
         if result.returncode != 0:
             print(f"\n错误：worker '{name}' 启动失败（退出码: {result.returncode}）")

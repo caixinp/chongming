@@ -24,10 +24,19 @@ def _is_gateway(name: str) -> bool:
     return name == "gateway"
 
 
+def _is_rust_worker(name: str) -> bool:
+    """检测 worker 是否为 Rust 项目（通过 Cargo.toml 判断）"""
+    worker_dir = os.path.join(PROJECT_ROOT, "workers", name)
+    return os.path.isfile(os.path.join(worker_dir, "Cargo.toml"))
+
+
 def _get_dockerfile(name: str) -> str:
     """根据名称返回对应的 Dockerfile 路径"""
     if _is_gateway(name):
         return os.path.join(PROJECT_ROOT, "docker-env", "gateway-binary.Dockerfile")
+    # Rust worker 使用 Rust 编译 Dockerfile（本身就是二进制，无需 PyInstaller）
+    if _is_rust_worker(name):
+        return os.path.join(PROJECT_ROOT, "docker-env", "worker-rust.Dockerfile")
     return os.path.join(PROJECT_ROOT, "docker-env", "worker-binary.Dockerfile")
 
 
@@ -41,20 +50,23 @@ def _get_default_tag(name: str) -> str:
 def add_binary_build_parser(subparsers):
     parser = subparsers.add_parser(
         "binary-build",
-        help="使用 PyInstaller 将 worker/gateway 打包为单二进制 Docker 镜像（生产环境推荐）",
+        help="将 worker/gateway 打包为最小 Docker 镜像（生产环境推荐）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例：
   # 打包 API Gateway 为二进制 Docker 镜像（300MB → ~30MB）
   chongming binary-build gateway
 
-  # 打包 example worker 为二进制 Docker 镜像
+  # 打包 Python worker（如 example）为二进制镜像
   chongming binary-build example
+
+  # 打包 Rust worker（如 example_rs）为原生二进制镜像
+  chongming binary-build example_rs
 
   # 指定镜像仓库 tag 并推送
   chongming binary-build gateway --tag registry.example.com/gateway:v1.0 --push
 
-  # 不缓存 PyInstaller 构建
+  # 不缓存构建
   chongming binary-build example --no-cache
 
   # 查看生产环境部署指南
@@ -62,17 +74,25 @@ def add_binary_build_parser(subparsers):
 
 支持的目标：
   gateway     - API Gateway（使用 docker-env/gateway-binary.Dockerfile）
-  <worker>    - workers/ 下的任意 worker（使用 docker-env/worker-binary.Dockerfile）
+  <worker>    - workers/ 下的任意 worker（自动检测：
 
-工作流程：
+                Python worker → docker-env/worker-binary.Dockerfile）
+                Rust worker   → docker-env/worker-rust.Dockerfile）
+
+工作流程（Python worker）：
   1. 在 builder 容器中安装所有依赖 + PyInstaller
   2. PyInstaller --onefile 打包为单文件二进制
   3. 将二进制复制到 busybox:glibc 最小镜像中
-  4. 最终镜像仅包含：二进制 + config.toml（+ public/ 对于 gateway）
+  4. 最终镜像仅包含：二进制 + config.toml
+
+工作流程（Rust worker）：
+  1. cargo build --release 编译为静态链接原生二进制
+  2. 复制到 debian:stable-slim 最小基础镜像
+  3. 最终镜像 ~20-50MB（原生性能，无运行时开销）
 
 对比 chongming docker-build：
   docker-build  → 完整 Python 运行时，适合开发/CI 快速迭代
-  binary-build  → 单二进制，极小镜像，适合生产部署
+  binary-build  → 单二进制/Rust 原生，极小镜像，适合生产部署
         """,
     )
     parser.add_argument(
@@ -150,7 +170,7 @@ def _ensure_docker_available():
 
 
 def _build_image(name: str, tag: str, no_cache: bool, base_image: str):
-    """执行 Docker 构建（PyInstaller 打包）"""
+    """执行 Docker 构建（PyInstaller 打包或 Rust 编译）"""
     if tag is None:
         tag = _get_default_tag(name)
 
@@ -159,21 +179,34 @@ def _build_image(name: str, tag: str, no_cache: bool, base_image: str):
         print(f"错误：找不到 Dockerfile：{dockerfile}")
         sys.exit(1)
 
+    is_rust = _is_rust_worker(name)
     target_label = "API Gateway" if _is_gateway(name) else f"Worker ({name})"
     print("=" * 70)
-    print(f"PyInstaller 二进制打包与 Docker 构建")
+    if is_rust:
+        print(f"Rust Worker 编译与 Docker 构建")
+    else:
+        print(f"PyInstaller 二进制打包与 Docker 构建")
     print("=" * 70)
     print(f"  目标:        {target_label}")
     print(f"  Tag:         {tag}")
     print(f"  Dockerfile:  {dockerfile}")
-    print(f"  基础镜像:    {base_image}")
     print(f"  工作目录:    {PROJECT_ROOT}")
     print()
-    print("步骤：")
-    print("  1. pip install 依赖 + PyInstaller")
-    print("  2. PyInstaller --onefile 打包为单二进制")
-    print("  3. 复制到最小基础镜像")
-    print()
+    if is_rust:
+        print("步骤（Rust 原生编译）：")
+        print("  1. cargo build --release 编译为原生二进制")
+        print("  2. 复制到 debian:stable-slim 最小基础镜像")
+        print(f"  3. 最终镜像 ~20-50MB（仅 Rust 二进制 + glibc 运行时）")
+        print()
+        print("  ⚠️  首次构建需要下载 Rust 依赖和编译，耗时较长。")
+        print("     后续构建利用 Docker 层缓存，仅重新编译修改的源文件。")
+        print()
+    else:
+        print("步骤：")
+        print("  1. pip install 依赖 + PyInstaller")
+        print("  2. PyInstaller --onefile 打包为单二进制")
+        print("  3. 复制到最小基础镜像")
+        print()
 
     env = os.environ.copy()
     env["DOCKER_BUILDKIT"] = "1"

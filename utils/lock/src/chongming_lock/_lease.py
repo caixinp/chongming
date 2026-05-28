@@ -103,7 +103,7 @@ class LeaseLock(ChongmingLock):
         if entry is None:
             return False
 
-        data = self._parse_lock_data(entry.value)
+        data = self._parse_lock_data(entry.value) # type: ignore
         if data is None:
             return False
 
@@ -123,7 +123,7 @@ class LeaseLock(ChongmingLock):
 
         try:
             self._revision = await self._cache.update(
-                self._lease_key, lock_data, entry.revision
+                self._lease_key, lock_data, entry.revision # type: ignore
             )
             self._lease_start = now
             self._lease_expires = now + self._ttl
@@ -157,7 +157,7 @@ class LeaseLock(ChongmingLock):
             self._acquired = False
             return
 
-        data = self._parse_lock_data(entry.value)
+        data = self._parse_lock_data(entry.value) # type: ignore
         if data is None:
             return
 
@@ -182,7 +182,7 @@ class LeaseLock(ChongmingLock):
             self._revision = await self._cache.update(
                 self._lease_key,
                 _encode_lock_data(data),
-                entry.revision,
+                entry.revision, # type: ignore
             )
             self._lease_expires = now + self._ttl
             logger.debug("❤️ 租约续期成功: %s (到期时间: %s)", self._lock_name, self._lease_expires)
@@ -198,7 +198,7 @@ class LeaseLock(ChongmingLock):
         if entry is None:
             return None
 
-        data = self._parse_lock_data(entry.value)
+        data = self._parse_lock_data(entry.value) # type: ignore
         if data is None:
             return None
 

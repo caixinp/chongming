@@ -93,7 +93,11 @@ def handle_gateway(args):
     print(f"  命令: {' '.join(cmd)}")
     print()
 
-    result = subprocess.run(cmd, cwd=PROJECT_ROOT)
+    try:
+        result = subprocess.run(cmd, cwd=PROJECT_ROOT)
+    except KeyboardInterrupt:
+        print("\nAPI Gateway 已停止。")
+        sys.exit(0)
 
     if result.returncode != 0:
         print(f"\n错误：API Gateway 启动失败（退出码: {result.returncode}）")

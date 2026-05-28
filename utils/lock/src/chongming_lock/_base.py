@@ -17,9 +17,16 @@ import uuid
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator
 
 from chongming_cache import ChongmingCache
+
+from ._mutex import MutexLock
+from ._rwlock import ReadWriteLock
+from ._semaphore import SemaphoreLock
+from ._reentrant import ReentrantLock
+from ._lease import LeaseLock
+from ._fencing_token import FencingTokenLock
 
 
 logger = logging.getLogger("chongming-lock")
@@ -247,7 +254,7 @@ class ChongmingLock(ABC):
             self._acquired = False
             return
 
-        data = _decode_lock_data(entry.value)
+        data = _decode_lock_data(entry.value) # type: ignore
         if data.get("instance_id") != self._instance_id:
             logger.warning(
                 "❤️‍🩹 锁已被其他实例持有（%s），停止续期: %s",
@@ -263,7 +270,7 @@ class ChongmingLock(ABC):
 
         try:
             self._revision = await self._cache.update(
-                self._lock_key, _encode_lock_data(data), entry.revision
+                self._lock_key, _encode_lock_data(data), entry.revision # type: ignore
             )
             logger.debug("❤️ 锁续期成功: %s (rev=%s)", self._lock_name, self._revision)
         except Exception:
@@ -312,8 +319,7 @@ class LockFactory:
         *,
         ttl: float = 30.0,
         renew_interval: float = 10.0,
-    ) -> "MutexLock":
-        from ._mutex import MutexLock
+    ) -> MutexLock:
         return MutexLock(self._cache, lock_name, ttl=ttl, renew_interval=renew_interval)
 
     def rwlock(
@@ -322,8 +328,7 @@ class LockFactory:
         *,
         ttl: float = 30.0,
         renew_interval: float = 10.0,
-    ) -> "ReadWriteLock":
-        from ._rwlock import ReadWriteLock
+    ) -> ReadWriteLock:
         return ReadWriteLock(self._cache, lock_name, ttl=ttl, renew_interval=renew_interval)
 
     def semaphore(
@@ -333,8 +338,7 @@ class LockFactory:
         *,
         ttl: float = 30.0,
         renew_interval: float = 10.0,
-    ) -> "SemaphoreLock":
-        from ._semaphore import SemaphoreLock
+    ) -> SemaphoreLock:
         return SemaphoreLock(self._cache, lock_name, max_count, ttl=ttl, renew_interval=renew_interval)
 
     def reentrant(
@@ -343,8 +347,7 @@ class LockFactory:
         *,
         ttl: float = 30.0,
         renew_interval: float = 10.0,
-    ) -> "ReentrantLock":
-        from ._reentrant import ReentrantLock
+    ) -> ReentrantLock:
         return ReentrantLock(self._cache, lock_name, ttl=ttl, renew_interval=renew_interval)
 
     def lease(
@@ -353,8 +356,7 @@ class LockFactory:
         *,
         ttl: float = 30.0,
         renew_interval: float = 10.0,
-    ) -> "LeaseLock":
-        from ._lease import LeaseLock
+    ) -> LeaseLock:
         return LeaseLock(self._cache, lock_name, ttl=ttl, renew_interval=renew_interval)
 
     def fencing_token(
@@ -363,6 +365,5 @@ class LockFactory:
         *,
         ttl: float = 30.0,
         renew_interval: float = 10.0,
-    ) -> "FencingTokenLock":
-        from ._fencing_token import FencingTokenLock
+    ) -> FencingTokenLock:
         return FencingTokenLock(self._cache, lock_name, ttl=ttl, renew_interval=renew_interval)

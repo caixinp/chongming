@@ -171,3 +171,34 @@ services:
   #     - NATS_SERVERS=nats://nats-1:4222,nats://nats-2:4222,nats://nats-3:4222
   #   volumes:
   #     - ./workers/testworker/config.toml:/app/config.toml:ro
+
+  # ===== example-rs-worker (Rust) =====
+  # Rust Worker 示例。自动使用 worker-rust.Dockerfile 编译 Rust 原生二进制。
+  # 技术方案对比：
+  #   编译为原生二进制，镜像 ~30MB，相比 Python 运行时 ~200MB 小 85%
+  #   Rust 二进制运行时无需 Python 解释器，无依赖冲突，启动快
+  # 使用方式：
+  #   方案 A: 直接使用 docker compose build（自动编译 Rust）
+  #   方案 B: 先 chongming binary-build example_rs --tag chongming/example_rs:latest
+  #           然后取消注释 image，注释 build
+  #
+  # example-rs-worker:
+  #   build:
+  #     context: ..
+  #     dockerfile: docker-env/worker-rust.Dockerfile
+  #     args:
+  #       WORKER_NAME: example_rs
+  #   # image: chongming/example_rs:latest
+  #   container_name: example-rs-worker
+  #   restart: unless-stopped
+  #   networks:
+  #     - microservices-net
+  #   depends_on:
+  #     nats-1:
+  #       condition: service_started
+  #     nats-2:
+  #       condition: service_started
+  #     nats-3:
+  #       condition: service_started
+  #   environment:
+  #     - NATS_SERVERS=nats://nats-1:4222,nats://nats-2:4222,nats://nats-3:4222

@@ -4,7 +4,7 @@ from .nats_client import get_nats_client
 from fastapi import Request, HTTPException, FastAPI
 import json
 import asyncio
-from typing import List, Optional, Dict, Any, Type, Union
+from typing import List, Optional, Dict, Any, Type, Union, Tuple
 import re
 from pydantic import BaseModel, create_model
 from chongming_lock import MutexLock, LockNotAcquiredError
@@ -22,6 +22,9 @@ _TYPE_MAP: Dict[str, type] = {
     "list": list,
     "any": Any, # type: ignore
 }
+
+# 支持校验的参数类型列表
+_VALID_TYPES = {"str", "int", "float", "bool"}
 
 
 class DynamicRoute:
@@ -131,6 +134,97 @@ class DynamicRoute:
         )
 
     # ──────────────────────────────────────────────
+    # 参数解析（从 "name: type" 格式）
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    def _parse_params(params: List[str]) -> Tuple[List[str], Dict[str, str]]:
+        """解析 "name: type" 格式的参数列表。
+        
+        返回:
+        - param_names: 纯参数名列表 ["a", "b"]
+        - param_types: 参数名到类型的映射 {"a": "float", "b": "float"}
+        """
+        param_names = []
+        param_types = {}
+
+        for p in params:
+            p = p.strip()
+            if not p:
+                continue
+
+            if ":" in p:
+                # "name: type" 格式
+                parts = p.rsplit(":", 1)
+                name = parts[0].strip()
+                type_str = parts[1].strip().lower() if len(parts) > 1 else "str"
+            else:
+                # 只有参数名，无类型声明 → 默认为 str
+                name = p
+                type_str = "str"
+
+            # 校验类型是否合法
+            if type_str not in _VALID_TYPES:
+                logger.warning(
+                    "Unknown param type '%s' for '%s', defaulting to 'str'",
+                    type_str, name
+                )
+                type_str = "str"
+
+            param_names.append(name)
+            param_types[name] = type_str
+
+        return param_names, param_types
+
+    # ──────────────────────────────────────────────
+    # 参数类型校验（严格模式）
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    def _validate_and_cast(value: str, target_type: str, param_name: str) -> Any:
+        """严格校验并转换参数值。
+        
+        如果类型不匹配，抛出 ValueError 并说明原因。
+        
+        返回转换后的值，或抛出异常。
+        """
+        if target_type in ("str", "any"):
+            return value
+
+        try:
+            if target_type == "int":
+                # 严格校验：必须是纯整数，浮点数字符串如 "10.5" 不接受
+                if not re.match(r'^-?\d+$', value.strip()):
+                    raise ValueError(f"invalid integer value: '{value}'")
+                return int(value)
+
+            elif target_type == "float":
+                # 严格校验浮点数
+                try:
+                    return float(value)
+                except ValueError:
+                    raise ValueError(f"invalid float value: '{value}'")
+
+            elif target_type == "bool":
+                if isinstance(value, str):
+                    lower_val = value.lower().strip()
+                    if lower_val in ('true', '1', 'yes'):
+                        return True
+                    elif lower_val in ('false', '0', 'no'):
+                        return False
+                    else:
+                        raise ValueError(
+                            f"invalid bool value: '{value}'. "
+                            f"Expected true/false, 1/0, yes/no"
+                        )
+                return bool(value)
+
+        except ValueError:
+            raise
+
+        return value
+
+    # ──────────────────────────────────────────────
     # OpenAPI schema 刷新
     # ──────────────────────────────────────────────
 
@@ -162,7 +256,17 @@ class DynamicRoute:
         - 构造完整路径（prefix + relative_path）
         - 派生默认 tags
         - 路由冲突检测时作为路径的一部分
+
+        'params' 支持两种格式:
+        - 纯参数名: ["a", "b"] → 类型默认为 str
+        - 带类型声明: ["a: float", "b: float"] → 网关层做严格类型校验
+        
+        支持的参数类型: str, int, float, bool
+        类型校验失败时返回 HTTP 400 错误，不会转发给 Worker。
         """
+        # ── 解析参数类型声明 ──────────────────────────────
+        param_names, param_types = self._parse_params(params)
+
         if not router_prefix:
             parts = path.split('/')
             if len(parts) > 1 and parts[1]:
@@ -202,16 +306,35 @@ class DynamicRoute:
                         data.update(body)
                 except:
                     pass
-            payload = json.dumps({p: data.get(p) for p in params}).encode()
+
+            # ── 参数类型校验与转换（严格模式） ─────────────────
+            # 根据 params 中声明的类型（"a: float"）进行严格校验
+            # 类型不匹配时直接返回 400 Bad Request，不转发给 Worker
+            converted = {}
+            for p in param_names:
+                raw_value = data.get(p)
+                if raw_value is None:
+                    converted[p] = None
+                    continue
+
+                target_type = param_types.get(p, "str")
+                try:
+                    converted[p] = self._validate_and_cast(raw_value, target_type, p)
+                except ValueError as e:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Parameter '{p}': {e}"
+                    )
+
+            payload = json.dumps(converted).encode()
+
             try:
                 nc = await get_nats_client()
-                # 通过 NATS Header 传递 request_id，Worker 端可读取并回传
                 resp = await nc.request(
                     subject, payload,
                     timeout=timeout,
                     headers={"request_id": request_id},
                 )
-                # 如果 Worker 在响应头中回传了 request_id，也记录下来
                 worker_request_id = resp.headers.get("request_id", "") if resp.headers else ""
                 if worker_request_id and worker_request_id != request_id:
                     logger.warning(
@@ -233,14 +356,26 @@ class DynamicRoute:
         # 构建 OpenAPI 参数描述
         path_params_set = set(re.findall(r'\{(\w+)\}', relative_path))
         openapi_params = []
-        for p in params:
+        for p in param_names:
             param_in = "path" if p in path_params_set else "query"
+
+            # 在 OpenAPI schema 中标注参数类型
+            type_name = param_types.get(p, "str")
+            openapi_type_map = {
+                "int": "integer",
+                "float": "number",
+                "bool": "boolean",
+                "str": "string",
+            }
+            openapi_type = openapi_type_map.get(type_name, "string")
+            param_schema = {"type": openapi_type}
+
             openapi_params.append({
                 "name": p,
                 "in": param_in,
                 "required": param_in == "path",
-                "schema": {"type": "string"},
-                "description": f"Parameter '{p}' for {subject}",
+                "schema": param_schema,
+                "description": f"Parameter '{p}' (type: {type_name}) for {subject}",
             })
         openapi_extra = {"parameters": openapi_params}
 
@@ -282,7 +417,10 @@ class DynamicRoute:
                 for name, field in resolved_response_model.model_fields.items()
             }
             response_model_info = f", response_model: {model_name}{model_types}"
-        logger.info("Route added: %s %s -> NATS %s%s", method, full_path, subject, response_model_info)
+        logger.info(
+            "Route added: %s %s -> NATS %s [params=%s]%s",
+            method, full_path, subject, param_types, response_model_info
+        )
 
     async def remove_dynamic_route(self, router_prefix: str, path: str, method: str):
         """从 app.routes 中移除指定路由"""

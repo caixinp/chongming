@@ -219,7 +219,7 @@ class SemaphoreLock(ChongmingLock):
         entry = await self._cache.get(self._sem_key)
         if entry is None:
             return {"holders": [], "revision": None}
-        data = self._parse_lock_data(entry.value)
+        data = self._parse_lock_data(entry.value) # type: ignore
         if data is None:
             return {"holders": [], "revision": None}
         data["revision"] = entry.revision

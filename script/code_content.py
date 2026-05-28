@@ -14,7 +14,7 @@ def generate_markdown_from_py_files(directory, output_file):
             dirs[:] = [d for d in dirs if d != "node_modules"]
             dirs[:] = [d for d in dirs if d != "build"]
             dirs[:] = [d for d in dirs if d != "dist"]
-            dirs[:] = [d for d in dirs if d != "chongming-web"]
+            dirs[:] = [d for d in dirs if d != "target"]
             for file in files:
                 if (
                     file.endswith(".py")

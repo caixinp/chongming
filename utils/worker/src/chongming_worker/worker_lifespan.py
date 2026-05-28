@@ -70,7 +70,7 @@ class WorkerLifespan:
         # 从配置读取心跳间隔，默认 15 秒
         self._heartbeat_interval = self.config.get("registration", {}).get("heartbeat_interval", 15)
         self._validate_ttl_config()
-        self.nc: Optional[nats.NATS] = None
+        self.nc: Optional[nats.NATS] = None # type: ignore
         self._handlers: dict[str, HandlerInfo] = {}
         self._subscriptions: list[Any] = []
         self._heartbeat_task: Optional[asyncio.Task] = None
@@ -306,7 +306,7 @@ class WorkerLifespan:
                 if heartbeat_count % reregister_cycles == 0:
                     # 批量续期：一次性续期所有路由，避免逐个发送
                     # 替代原先发送 type=register 导致路由删除重建的不稳定方式
-                    await self.nc.publish(
+                    await self.nc.publish( # type: ignore
                         "service.registry",
                         json.dumps(heartbeat_batch).encode()
                     )
@@ -315,7 +315,7 @@ class WorkerLifespan:
                     # 逐个发送每个 subject 的心跳
                     for item in self.config["registration"]["items"]:
                         heartbeat_per_subject["subject"] = item["subject"]
-                        await self.nc.publish(
+                        await self.nc.publish( # type: ignore
                             "service.registry",
                             json.dumps(heartbeat_per_subject).encode()
                         )
@@ -419,7 +419,7 @@ class WorkerLifespan:
                 "type": "deregister",
                 "service": self.config["registration"]["service"],
             }
-            await self.nc.publish(
+            await self.nc.publish( # type: ignore
                 "service.registry",
                 json.dumps(deregister_msg).encode()
             )
@@ -448,7 +448,7 @@ class WorkerLifespan:
         logger.info("Reconnected to NATS")
         # 重新注册
         registration = self.config["registration"]
-        await self.nc.publish(
+        await self.nc.publish( # type: ignore
             "service.registry",
             json.dumps(registration).encode()
         )

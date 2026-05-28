@@ -100,7 +100,7 @@ class ReentrantLock(ChongmingLock):
                 return True
 
             # 锁已存在
-            data = self._parse_lock_data(entry.value)
+            data = self._parse_lock_data(entry.value) # type: ignore
             if data is None:
                 return False
 
@@ -116,7 +116,7 @@ class ReentrantLock(ChongmingLock):
                 try:
                     lock_data = self._build_lock_data(count=1, stolen_from=data.get("instance_id"))
                     self._revision = await self._cache.update(
-                        self._reentrant_key, lock_data, entry.revision
+                        self._reentrant_key, lock_data, entry.revision # type: ignore
                     )
                     self._local_count = 1
                     logger.info(
@@ -180,7 +180,7 @@ class ReentrantLock(ChongmingLock):
             if entry is None:
                 return
 
-            data = self._parse_lock_data(entry.value)
+            data = self._parse_lock_data(entry.value) # type: ignore
             if data is None or data.get("instance_id") != self._instance_id:
                 return
 
@@ -192,7 +192,7 @@ class ReentrantLock(ChongmingLock):
             self._revision = await self._cache.update(
                 self._reentrant_key,
                 _encode_lock_data(data),
-                entry.revision,
+                entry.revision, # type: ignore
             )
 
         except KeyWrongLastSequenceError:
@@ -212,7 +212,7 @@ class ReentrantLock(ChongmingLock):
                 self._acquired = False
                 return
 
-            data = self._parse_lock_data(entry.value)
+            data = self._parse_lock_data(entry.value) # type: ignore
             if data is None:
                 return
 
@@ -234,7 +234,7 @@ class ReentrantLock(ChongmingLock):
             self._revision = await self._cache.update(
                 self._reentrant_key,
                 _encode_lock_data(data),
-                entry.revision,
+                entry.revision, # type: ignore
             )
             logger.debug(
                 "❤️ 可重入锁续期成功: %s (count=%d, rev=%s)",

@@ -109,7 +109,7 @@ class FencingTokenLock(ChongmingLock):
         if entry is None:
             return False
 
-        data = self._parse_lock_data(entry.value)
+        data = self._parse_lock_data(entry.value) # type: ignore
         if data is None:
             return False
 
@@ -127,7 +127,7 @@ class FencingTokenLock(ChongmingLock):
 
         try:
             self._revision = await self._cache.update(
-                self._fencing_key, lock_data, entry.revision
+                self._fencing_key, lock_data, entry.revision # type: ignore
             )
             # 生成新令牌
             self._token = await self._next_token()
@@ -159,12 +159,12 @@ class FencingTokenLock(ChongmingLock):
                     rev = await self._cache.create(self._counter_key, b"1")
                     return 1
 
-                current = int(entry.value.decode())
+                current = int(entry.value.decode()) # type: ignore
                 next_val = current + 1
                 await self._cache.update(
                     self._counter_key,
                     str(next_val).encode(),
-                    entry.revision,
+                    entry.revision, # type: ignore
                 )
                 return next_val
             except KeyWrongLastSequenceError:
@@ -190,7 +190,7 @@ class FencingTokenLock(ChongmingLock):
             if entry is None:
                 return
 
-            data = self._parse_lock_data(entry.value)
+            data = self._parse_lock_data(entry.value) # type: ignore
             if data is None or data.get("instance_id") != self._instance_id:
                 return
 
@@ -202,7 +202,7 @@ class FencingTokenLock(ChongmingLock):
             self._revision = await self._cache.update(
                 self._fencing_key,
                 _encode_lock_data(data),
-                entry.revision,
+                entry.revision, # type: ignore
             )
         except KeyWrongLastSequenceError:
             pass
@@ -231,7 +231,7 @@ class FencingTokenLock(ChongmingLock):
             self._acquired = False
             return
 
-        data = self._parse_lock_data(entry.value)
+        data = self._parse_lock_data(entry.value) # type: ignore
         if data is None:
             return
 
@@ -249,7 +249,7 @@ class FencingTokenLock(ChongmingLock):
             self._revision = await self._cache.update(
                 self._fencing_key,
                 _encode_lock_data(data),
-                entry.revision,
+                entry.revision, # type: ignore
             )
             logger.debug("❤️ 栅栏锁续期成功: %s (token=%d)", self._lock_name, self._token or -1)
         except KeyWrongLastSequenceError:
@@ -263,7 +263,7 @@ class FencingTokenLock(ChongmingLock):
         if entry is None:
             return None
         try:
-            return int(entry.value.decode())
+            return int(entry.value.decode()) # type: ignore
         except (ValueError, UnicodeDecodeError):
             return None
 

@@ -11,24 +11,44 @@ import sys
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 
 
+def _is_rust_worker(worker_dir: str) -> bool:
+    """检测 worker 是否为 Rust 项目（通过 Cargo.toml 判断）"""
+    return os.path.isfile(os.path.join(worker_dir, "Cargo.toml"))
+
+
+def _get_worker_dockerfile(name: str) -> str:
+    """根据 worker 类型选择对应的 Dockerfile"""
+    worker_dir = os.path.join(PROJECT_ROOT, "workers", name)
+    if _is_rust_worker(worker_dir):
+        return os.path.join(PROJECT_ROOT, "docker-env", "worker-rust.Dockerfile")
+    return os.path.join(PROJECT_ROOT, "docker-env", "worker.Dockerfile")
+
+
 def add_docker_build_parser(subparsers):
     parser = subparsers.add_parser(
         "docker-build",
-        help="打包 worker 的 Docker 镜像",
+        help="打包 worker 的 Docker 镜像（自动检测 Python/Rust）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例：
-  # 打包 example worker，默认 tag 为 chongming/example:latest
+  # 打包 Python worker（如 example）
   chongming docker-build example
 
-  # 打包 testworker，指定 tag
-  chongming docker-build testworker --tag registry.example.com/workers/testworker:v1.0.0
+  # 打包 Rust worker（如 example_rs，自动检测并使用 Rust Dockerfile）
+  chongming docker-build example_rs
+
+  # 指定 tag
+  chongming docker-build example_rs --tag registry.example.com/workers/example_rs:v1.0.0
 
   # 打包并推送到远程仓库
-  chongming docker-build example --tag myrepo/example:latest --push
+  chongming docker-build example_rs --tag myrepo/example_rs:latest --push
 
   # 打包并指定 Dockerfile 路径
-  chongming docker-build example --dockerfile /path/to/Dockerfile
+  chongming docker-build example_rs --dockerfile /path/to/Dockerfile
+
+自动检测：
+  - 如果 worker 目录包含 Cargo.toml → 自动使用 worker-rust.Dockerfile（Rust 编译）
+  - 否则 → 使用 worker.Dockerfile（Python pip 安装）
 
 生产环境部署说明：
   生成镜像后，需要将镜像推送到镜像仓库（如 Docker Hub、Harbor、AWS ECR 等），
@@ -71,6 +91,13 @@ def add_docker_build_parser(subparsers):
         action="append",
         default=[],
         help="构建参数，可多次使用（如 --build-arg KEY=VALUE）",
+    )
+    parser.add_argument(
+        "--rust-build-mode",
+        type=str,
+        default="release",
+        choices=["release", "debug"],
+        help="Rust 编译模式（默认: release，仅对 Rust worker 有效）",
     )
     parser.add_argument(
         "--help-deploy",
@@ -263,10 +290,25 @@ def handle_docker_build(args):
         return
 
     # 验证 worker 存在
-    _ensure_worker_exists(args.name)
+    worker_dir = _ensure_worker_exists(args.name)
 
     # 检查 docker 是否可用
     _ensure_docker_available()
+
+    # 自动检测 Rust worker 并选择合适的 Dockerfile
+    if args.dockerfile is None:
+        args.dockerfile = _get_worker_dockerfile(args.name)
+
+    # 检测是否为 Rust worker，打印额外提示
+    is_rust = _is_rust_worker(worker_dir)
+    if is_rust:
+        print("🔧 检测到 Rust worker，将使用 Rust 编译 Dockerfile")
+        print("   首次构建需要下载 Rust 依赖和编译，耗时较长。")
+        print()
+
+    # 如果是 Rust worker，自动添加 RUST_BUILD_MODE
+    if is_rust and not any(ba.startswith("RUST_BUILD_MODE=") for ba in args.build_arg):
+        args.build_arg.append(f"RUST_BUILD_MODE={args.rust_build_mode}")
 
     # 构建镜像
     tag = _build_image(

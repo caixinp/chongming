@@ -138,7 +138,7 @@ class _ReaderLock:
             write_entry = await self._cache.get(self._writer_key)
             if write_entry is not None:
                 # 有写锁，检查是否过期
-                data = ChongmingLock._parse_lock_data(write_entry.value)
+                data = ChongmingLock._parse_lock_data(write_entry.value) # type: ignore
                 if data:
                     if time.time() < data.get("expires_at", 0):
                         # 写锁未过期，等待
@@ -210,7 +210,7 @@ class _ReaderLock:
         entry = await self._cache.get(self._readers_key)
         if entry is None:
             return {"readers": [], "revision": None}
-        data = ChongmingLock._parse_lock_data(entry.value)
+        data = ChongmingLock._parse_lock_data(entry.value) # type: ignore
         if data is None:
             return {"readers": [], "revision": None}
         data["revision"] = entry.revision
@@ -248,7 +248,7 @@ class _WriterLock:
             # 1. 检查是否有读者正在读取
             readers_entry = await self._cache.get(self._readers_key)
             if readers_entry is not None:
-                readers_data = ChongmingLock._parse_lock_data(readers_entry.value)
+                readers_data = ChongmingLock._parse_lock_data(readers_entry.value) # type: ignore
                 if readers_data and readers_data.get("readers"):
                     # 有活跃读者，等待
                     await self._check_deadline(deadline, timeout)
@@ -274,7 +274,7 @@ class _WriterLock:
                 # 写锁已存在，检查是否过期
                 write_entry = await self._cache.get(self._writer_key)
                 if write_entry is not None:
-                    data = ChongmingLock._parse_lock_data(write_entry.value)
+                    data = ChongmingLock._parse_lock_data(write_entry.value) # type: ignore
                     if data:
                         if time.time() < data.get("expires_at", 0):
                             # 未过期
@@ -289,7 +289,7 @@ class _WriterLock:
                                 "stolen_from": data.get("instance_id", "unknown"),
                             })
                             self._revision = await self._cache.update(
-                                self._writer_key, new_data, write_entry.revision
+                                self._writer_key, new_data, write_entry.revision # type: ignore
                             )
                             self._acquired = True
                             logger.info(
