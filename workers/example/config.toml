@@ -23,6 +23,7 @@ items = [
         subject = "calc.add",
         method = "GET",
         path = "/add",
+        shared = true,
         summary = "Add two numbers",
         docstring = "Add two numbers and return result with metadata",
         params = ["a: float", "b: float"],

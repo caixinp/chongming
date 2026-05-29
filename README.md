@@ -19,10 +19,130 @@ Chongming 是一个基于 **NATS 消息队列**的现代化微服务框架，提
 | **NATS 消息驱动** | 基于 NATS Request/Reply 模式实现服务间通信 |
 | **Queue Group 负载均衡** | 同一 Worker 多实例自动分发请求 |
 | **分布式锁（6 种）** | 互斥锁、读写锁、信号量、可重入锁、租约锁、栅栏令牌锁 |
-| **开源 API 文档** | 动态路由自动生成 OpenAPI/Swagger 文档 |
+| **OpenAPI 文档** | 动态路由自动生成 Swagger UI 文档 |
 | **分布式追踪** | request_id 贯穿 Gateway → Worker 全链路 |
 | **二进制部署** | PyInstaller 编译为单文件二进制，镜像仅 ~20MB |
 | **Docker 一键部署** | 开发/生产双模式 Docker Compose 编排 |
+
+---
+
+## Worker 详解（核心概念）
+
+### 什么是 Worker？
+
+Worker 是 Chongming 微服务架构中的**业务逻辑执行单元**。每个 Worker 是一个独立的服务进程，通过 NATS 消息队列与 API Gateway 和其他 Worker 通信。
+
+```
+客户端 HTTP 请求
+      │
+      ▼
+┌──────────────┐     NATS Request/Reply     ┌──────────────────┐
+│ API Gateway  │ ──────────────────────────→ │    Worker        │
+│  (FastAPI)   │                             │  (业务处理单元)   │
+│              │ ←────────────────────────── │                  │
+└──────────────┘           JSON              └──────────────────┘
+```
+
+### Worker 的职责
+
+| 职责 | 说明 |
+|------|------|
+| **注册路由** | 启动时通过 NATS 向 Gateway 上报自己的 handler 列表 |
+| **处理请求** | 监听 NATS subject，收到请求后调用对应的业务函数 |
+| **发送心跳** | 定期发送心跳，告知 Gateway 自己仍存活 |
+| **优雅关闭** | 收到终止信号时，先注销路由再关闭连接 |
+| **服务间通信** | 通过 `_app.request()` 同步调用或 `_app.publish()` 异步广播 |
+
+### Worker 生命周期
+
+```
+启动
+  │
+  ▼
+┌─────────────────────┐
+│  加载 config.toml    │  ← Worker 名称、NATS 地址、路由配置
+└─────────┬───────────┘
+          ▼
+┌─────────────────────┐
+│  连接 NATS 集群       │  ← 支持多节点高可用
+└─────────┬───────────┘
+          ▼
+┌─────────────────────┐
+│  注册服务到 Gateway   │  ← 发送注册消息到 service.registry
+└─────────┬───────────┘
+          ▼
+┌─────────────────────┐
+│  订阅 handler subject│  ← 开始监听 NATS 消息
+└─────────┬───────────┘
+          ▼
+┌─────────────────────┐     ┌──────────────────────┐
+│  循环：发送心跳       │────→│ 每 heartbeat_interval │
+│       等待消息        │     │ 秒发一次心跳           │
+│       处理请求        │     └──────────────────────┘
+└─────────┬───────────┘
+          ▼  (收到 SIGTERM/SIGINT)
+┌─────────────────────┐
+│  优雅关闭             │
+│  ├─ 停止心跳          │
+│  ├─ 取消订阅          │
+│  ├─ 注销服务          │
+│  └─ 关闭 NATS 连接    │
+└─────────────────────┘
+```
+
+---
+
+## 快速创建自己的 Worker
+
+### 方式一：使用 CLI 脚手架（推荐）
+
+```bash
+# 创建 Python Worker
+chongming new my-worker
+
+# 或创建 Rust Worker
+chongming new my-worker --lang rust
+```
+
+这会自动生成完整的项目结构，包括 `config.toml`、`main.py`、handler 目录等。
+
+### 方式二：手动搭建
+
+```bash
+# 1. 创建项目目录
+mkdir -p workers/my-worker/app/handlers
+cd workers/my-worker
+
+# 2. 创建 main.py
+cat > main.py << 'EOF'
+from app.bootstrap import app
+app.run()
+EOF
+
+# 3. 创建 bootstrap.py
+mkdir -p app
+cat > app/bootstrap.py << 'EOF'
+from chongming_worker.worker_lifespan import WorkerLifespan
+app = WorkerLifespan("config.toml")
+EOF
+
+# 4. 创建 handler
+cat > app/handlers/hello.py << 'EOF'
+from app.bootstrap import app
+
+@app.handler("hello.world")
+async def hello(name: str) -> dict:
+    return {"message": f"Hello, {name}!"}
+EOF
+
+cat > app/handlers/__init__.py << 'EOF'
+from app.handlers import hello  # noqa: F401
+EOF
+```
+
+### Worker 核心配置（config.toml）
+
+每个 Worker 的核心是 `config.toml`，它定义了 Worker 的身份、连接信息和所有 handler 的路由。详细说明见 [CLI README](cli/README.md#worker-configtoml-配置详解)。
 
 ---
 
@@ -57,7 +177,7 @@ Chongming 是一个基于 **NATS 消息队列**的现代化微服务框架，提
 ┌────────┐┌────────┐┌─────────────────────────────────────────┐
 │Worker  ││Worker  ││  基础设施                                │
 │Python  ││ Rust   ││  ┌─────────┐ ┌──────────┐ ┌──────────┐ │
-│(calc)  ││(demo)  ││  │PostgreSQL│ │  MinIO   │ │  Redis   │ │
+│(my-app)││(demo)  ││  │PostgreSQL│ │  MinIO   │ │  Redis   │ │
 └────────┘└────────┘│  │主备自动切换│ │对象存储2节点│ │(可选)    │ │
                     │  └─────────┘ └──────────┘ └──────────┘ │
                     └─────────────────────────────────────────┘
@@ -71,25 +191,21 @@ chongming/
 │   └── src/chongming_gateway/
 ├── cli/                    # ★ CLI 工具 — 脚手架 & 构建
 │   └── src/chongming_cli/
-├── workers/                # ★ Worker 服务实例
-│   ├── example/            #   Python Worker 示例（计算器 + Worker 间通讯）
-│   ├── example_rs/         #   Rust Worker 示例
-│   └── worker_comm/        #   Python Worker 间通讯专题示例
+├── workers/                # ★ Worker 服务实例（你的业务代码放这里）
+│   ├── example/            #   Python Worker 完整示例（建议从这开始）
+│   └── example_rs/         #   Rust Worker 示例
 ├── templates/              # ★ Worker 脚手架模板
-│   ├── python/             #   Python Worker 模板（来自 example，含全部特性）
-│   └── rust/               #   Rust Worker 模板（来自 example_rs）
-├── utils/                  # ★ 公共工具包（发布为独立 PyPI 包）
-│   ├── cache/              #   chongming-cache — NATS JetStream KV 缓存
+│   ├── python/             #   Python Worker 模板
+│   └── rust/               #   Rust Worker 模板
+├── utils/                  # ★ 公共工具包
+│   ├── worker/             #   chongming-worker — Python Worker 框架（核心！）
 │   ├── config/             #   chongming-config — TOML 配置加载
+│   ├── cache/              #   chongming-cache — NATS JetStream KV 缓存
 │   ├── lock/               #   chongming-lock — 6 种分布式锁
-│   ├── logging/            #   chongming-logging — 统一日志
-│   └── worker/             #   chongming-worker — Python Worker 框架
+│   └── logging/            #   chongming-logging — 统一日志
 ├── docker-env/             # ★ Docker 基础设施编排
 ├── front/                  # ★ Vue 3 管理面板
-│   └── chongming_front/
-├── docs/                   # ★ 技术文档
-│   └── api/                #   API 参考文档
-└── build/                  #   构建产物
+└── docs/                   # ★ 技术文档
 ```
 
 ---
@@ -123,17 +239,12 @@ uv run serve
 curl http://localhost:8000/health
 ```
 
-### 第 3 步：启动示例 Worker
+### 第 3 步：启动示例 Worker（Python）
 
 ```bash
-# Python Worker
 cd workers/example
 uv sync
 python main.py
-
-# 或 Rust Worker
-cd workers/example_rs
-cargo run
 ```
 
 ### 第 4 步：验证完整链路
@@ -143,12 +254,15 @@ cargo run
 curl http://localhost:8000/health
 
 # 计算器 API
-curl "http://localhost:8000/api/v1/calc/add?a=10&b=20"    # → 30
-curl "http://localhost:8000/api/v1/calc/subtract?a=30&b=10" # → 20
-curl "http://localhost:8000/api/v1/calc/multiply?a=6&b=7"   # → 42
-curl "http://localhost:8000/api/v1/calc/divide?a=100&b=3"   # → 33.33
+curl "http://localhost:8000/api/v1/calc/add?a=10&b=20"       # → {"result": 30}
+curl "http://localhost:8000/api/v1/calc/divide?a=100&b=3"    # → {"result": 33.33}
 
-# Swagger UI（浏览器打开）
+# Worker 间通讯（order.create 内部调用 user.query + publish 通知）
+curl -X POST "http://localhost:8000/api/v1/order/create" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "u001", "amount": 30, "item": "book"}'
+
+# Swagger UI
 open http://localhost:8000/docs
 ```
 
@@ -158,23 +272,22 @@ open http://localhost:8000/docs
 
 | 文档 | 适合读者 | 内容 |
 |------|----------|------|
+| **[Worker 框架 (Python)](utils/worker/README.md)** | **所有开发者（从这里开始）** | Worker 生命周期、handler 开发、服务间通信 |
+| **[Worker 示例](workers/example/README.md)** | **初学者** | 完整功能演示，覆盖全部特性 |
+| **[CLI 工具](cli/README.md)** | 所有开发者 | 脚手架创建、模型生成、构建部署 |
 | **[API Gateway](api_gateway/README.md)** | 后端开发者 | 网关配置、部署、API 参考 |
-| **[CLI 工具](cli/README.md)** | 所有开发者 | 脚手架、构建、部署命令 |
 | **[Docker 部署](docker-env/README.md)** | DevOps | 基础设施部署、生产环境配置 |
-| **[Worker 框架 (Python)](utils/worker/README.md)** | Python 开发者 | Worker 生命周期开发指南 |
 | **[Worker 框架 (Rust)](utils/rust/worker/README.md)** | Rust 开发者 | Rust Worker 开发指南 |
 | **[分布式锁](utils/lock/README.md)** | 高级开发者 | 6 种锁类型及使用示例 |
 | **[缓存工具](utils/cache/README.md)** | 开发者 | NATS JetStream KV 缓存使用 |
 | **[前端面板](front/chongming_front/README.md)** | 前端开发者 | Vue 3 管理面板开发 |
 | **[API 参考](docs/api/README.md)** | 框架开发者 | 完整内部 API 技术文档 |
 
-### 按角色推荐
+### 按角色推荐阅读顺序
 
-- **新建微服务** → `cli/README.md` → `chongming new`
-- **开发 Worker** → `utils/worker/README.md`
-- **本地调试** → `docker-env/README.md` → 启动基础设施
-- **生产部署** → `cli/README.md` → `chongming binary-build`
-- **阅读源码** → `docs/api/README.md`
+- **👤 新手入门** → `utils/worker/README.md` → `workers/example/README.md` → `cli/README.md`
+- **🔧 开发 Worker** → `utils/worker/README.md` → `workers/example/README.md`
+- **🚀 生产部署** → `cli/README.md` → `docker-env/README.md`
 
 ---
 
@@ -183,11 +296,11 @@ open http://localhost:8000/docs
 ```
 ┌─────────┐      HTTP       ┌──────────────┐     NATS Request     ┌─────────────┐
 │  Client  │ ───────────────→│ API Gateway  │ ──────────────────→ │   Worker    │
-│          │                │  (FastAPI)    │                     │ (Python/Rust)│
+│          │                │  (FastAPI)    │                     │ (业务逻辑)    │
 │          │ ←──────────────│              │ ←────────────────── │             │
 └─────────┘     JSON        └──────┬───────┘     JSON Response   └─────────────┘
                                    │
-                           NATS JetStream KV
+                          NATS JetStream KV
                                    │
                           ┌────────▼────────┐
                           │   分布式锁/缓存   │
@@ -196,10 +309,37 @@ open http://localhost:8000/docs
 ```
 
 1. **客户端** → 发送 HTTP 请求到 **API Gateway**
-2. **API Gateway** → 通过 NATS Request-Reply 转发到 **Worker**
-3. **Worker** → 处理业务逻辑，可选使用分布式锁/缓存
-4. **Worker** → 返回结果，Gateway 响应客户端
-5. **自动文档** → 动态路由自动出现在 `/docs` Swagger UI
+2. **API Gateway** → 查找匹配的 Worker → 通过 NATS Request-Reply 转发
+3. **Worker** → 接收消息 → 提取 request_id（分布式追踪）→ 解析参数 → 调用业务 handler
+4. **Worker** → 返回结果 → Gateway 响应客户端
+5. **Swagger UI** → `http://localhost:8000/docs` 自动展示所有动态路由
+
+### Worker 内部消息分发流程
+
+```
+NATS 消息到达
+      │
+      ▼
+┌─────────────────────┐
+│  提取 request_id     │  ← 用于分布式追踪
+└─────────┬───────────┘
+          ▼
+┌─────────────────────┐
+│  解析参数（JSON）     │
+│  ├─ dict → 按参数名映射并按类型注解转换
+│  └─ 非 dict → 作为唯一参数传入
+└─────────┬───────────┘
+          ▼
+┌─────────────────────┐
+│  调用业务 handler    │  ← 你的业务代码
+└─────────┬───────────┘
+          ▼
+┌─────────────────────┐
+│  序列化为 JSON       │
+│  通过 msg.respond()  │
+│  回传结果给 Gateway  │
+└─────────────────────┘
+```
 
 ---
 
@@ -211,12 +351,12 @@ open http://localhost:8000/docs
 | **API 网关** | FastAPI + Uvicorn/Gunicorn | HTTP 路由、OpenAPI 文档 |
 | **Worker (Python)** | asyncio + NATS-Py | 业务逻辑处理 |
 | **Worker (Rust)** | tokio + async-nats | 高性能业务处理 |
-| **配置管理** | TOML | 统一配置格式 |
+| **配置管理** | TOML | config.toml 统一配置格式 |
 | **容器编排** | Docker Compose | 基础设施部署 |
 | **前端** | Vue 3 + Vite + TypeScript | 管理面板 |
-| **构建工具** | PyInstaller / Nuitka / Cargo | 二进制编译 |
+| **构建工具** | PyInstaller / Cargo | 二进制编译 |
 | **数据库** | PostgreSQL (主备) | 持久化存储 |
-| **对象存储** | MinIO (分布式) | 文件存储 |
+| **对象存储** | MinIO (分布式) | 文件/日志存储 |
 
 ---
 

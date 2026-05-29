@@ -13,13 +13,16 @@
 import logging
 import time
 
+from nats.aio.client import Client
+
+from chongming_worker.worker_lifespan import WorkerLifespan
 from app.bootstrap import app
 
 logger = logging.getLogger("chongming.worker.example")
 
 
 @app.handler("user.health_check")
-async def health_check(_nc) -> dict:
+async def health_check(_nc: Client) -> dict: # type: ignore
     """
     健康检查 — 通过 _nc 直接访问原始 NATS 连接。
 
@@ -36,7 +39,7 @@ async def health_check(_nc) -> dict:
 
 
 @app.handler("system.info")
-async def system_info(_app) -> dict:
+async def system_info(_app: WorkerLifespan) -> dict:
     """
     系统信息 — 通过 _app.nats_connection 访问底层 NATS 连接。
 

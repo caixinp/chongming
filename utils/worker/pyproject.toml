@@ -12,6 +12,7 @@ dependencies = [
     "chongming-config",
     "chongming-logging",
     "nats-py",
+    "pydantic>=2.13.4",
 ]
 
 [tool.hatch.build.targets.wheel]

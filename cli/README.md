@@ -2,7 +2,7 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
-一站式项目管理命令行工具，支持项目脚手架创建、Docker 镜像构建、生产级二进制打包、本地开发服务器启动等功能，覆盖微服务全生命周期。
+一站式项目管理命令行工具，支持项目脚手架创建、Pydantic 模型生成、Docker 镜像构建、生产级二进制打包、本地开发服务器启动等功能，覆盖微服务全生命周期。
 
 ---
 
@@ -26,6 +26,7 @@ pip install chongming-cli
 | 命令 | 功能 | 文档 |
 |------|------|------|
 | `new` | 新建 Worker / Gateway 项目模板 | [👇 详解](#chongming-new--创建新项目) |
+| `gen-models` | 从 config.toml 生成 Pydantic 模型 | [👇 详解](#chongming-gen-models--生成-pydantic-模型) |
 | `gateway` | 启动 API Gateway 开发/生产服务器 | [👇 详解](#chongming-gateway--启动-gateway) |
 | `worker` | 启动 Worker 服务 | [👇 详解](#chongming-worker--启动-worker) |
 | `docker-build` | 构建 Docker 镜像（Python 运行时） | [👇 详解](#chongming-docker-build--构建-docker-镜像) |
@@ -62,8 +63,219 @@ chongming new my-service --no-venv
 | `--no-venv` | 不创建虚拟环境（仅 Python） |
 
 **模板行为：**
-- **Python**：从 `workers/example` 复制模板，自动重命名配置文件和 `main.py` 中的占位内容
-- **Rust**：从 `workers/example_rs` 复制模板，自动重命名 `Cargo.toml` 和 `main.rs` 中的占位内容
+- **Python**：从 `workers/example` 复制模板，自动重命名配置文件和占位内容
+- **Rust**：从 `workers/example_rs` 复制模板，自动重命名 `Cargo.toml` 和 `main.rs`
+
+---
+
+### `chongming gen-models` — 生成 Pydantic 模型
+
+从 Worker 的 `config.toml` 配置中读取 handler 注册信息，自动生成类型安全的 Pydantic 请求/响应模型代码，减少手动编写模型代码的工作量。
+
+```bash
+# 为指定 worker 生成模型（默认输出到 models/__init__.py）
+chongming gen-models example
+
+# 预览生成的模型（不写文件）
+chongming gen-models example --dry-run
+
+# 为所有 worker 生成模型
+chongming gen-models --all
+
+# 生成共享模型到 public 目录（跨 Worker 复用）
+chongming gen-models example --output public/__init__.py --shared
+```
+
+**参数：**
+
+| 参数 | 说明 |
+|------|------|
+| `name` | Worker 名称（对应 `workers/` 下的子目录名），不传则使用当前目录 |
+| `--all` | 为所有 Worker 生成模型（遍历 `workers/` 下所有含 `config.toml` 的目录） |
+| `--dry-run` | 只预览生成的 Pydantic 模型代码，不写入文件 |
+| `--output` | 指定输出文件路径（如 `public/__init__.py`），覆盖默认的 `models/__init__.py` |
+| `--shared` | 只生成标记为 `shared = true` 的 handler 模型（用于跨 Worker 共享模型） |
+
+**工作原理：**
+
+1. 读取 `config.toml` 中 `registration.items` 注册的每个 handler 配置
+2. 根据 handler 的参数签名和响应模型定义自动生成对应的 Pydantic 模型
+3. 默认输出到 `models/__init__.py`，通过 `--output` 可指定自定义路径
+4. 支持的类型：`str`, `int`, `float`, `bool`, `list`, `dict`, `Any`
+5. 自动处理必填字段（`__required__`）和可选字段（默认值）
+6. 支持嵌套对象模型（`object` 类型 + 内联字段定义）
+
+---
+
+#### Worker config.toml 配置详解
+
+`gen-models` 的数据来源是 Worker 的 `config.toml`。以下详细解释其完整配置结构。
+
+##### 基础结构
+
+```toml
+[worker]
+name = "example"          # Worker 名称，Gateway 用于服务发现
+version = "0.1.0"
+
+[nats]
+urls = [
+    "nats://localhost:4222",
+    "nats://localhost:4223",
+    "nats://localhost:4224"
+]
+
+[registration]
+type = "register"               # 固定为 "register"
+service = "example"             # 服务名，Gateway 用于 URL 路由前缀
+queue_group = "calc-workers"    # 队列组，同组多实例实现负载均衡
+router_prefix = "/calc"         # 路由前缀（已弃用，保留兼容）
+tags = ["calculator"]           # 标签，用于服务分类
+heartbeat_interval = 15         # 心跳间隔（秒），建议 10~30
+
+items = [
+    # ── 每个 handler 一条路由 ──────────────────────────
+    {
+        subject = "calc.add",               # NATS subject（必填）
+        method = "GET",                     # HTTP 方法
+        path = "/add",                      # URL 路径（Gateway 拼接后为 /api/v1/calc/add）
+        summary = "Add two numbers",        # OpenAPI 摘要
+        docstring = "详细说明",               # OpenAPI 描述
+        params = ["a: float", "b: float"],  # 请求参数（参数名: 类型）
+        ttl = 30,                           # 路由 TTL（秒），需 > heartbeat_interval
+        timeout = 2.0,                      # NATS 请求超时（秒）
+        response_model = {                  # 响应模型定义
+            result = ["float", "__required__"],  # 必填字段（无默认值）
+            operation = ["str", "add"],          # 可选字段（有默认值）
+            timestamp = ["float", 0.0]
+        },
+        shared = false,     # ❌ 不共享（默认），--shared 不会选中
+        internal = false,   # ❌ 对外公开（默认），显示在 Swagger 文档
+    },
+]
+```
+
+##### 字段说明
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `subject` | string | ✅ | — | NATS 主题名，handler 用 `@app.handler("calc.add")` 匹配 |
+| `method` | string | ✅ | — | HTTP 方法：`GET`/`POST`/`PUT`/`DELETE` |
+| `path` | string | ✅ | — | URL 路径，最终 URL: `/api/v1/{service}{path}` |
+| `params` | array | ❌ | `[]` | 参数列表 `["name: type"]`，决定 Input 模型字段 |
+| `ttl` | int | ❌ | 30 | 路由 TTL（秒），**必须大于 `heartbeat_interval`** |
+| `timeout` | float | ❌ | 2.0 | NATS request 超时时间 |
+| `response_model` | dict | ❌ | `{}` | 响应结构，决定 Output 模型 |
+| `shared` | bool | ❌ | `false` | 设为 `true` 会被 `--shared` 选中 |
+| `internal` | bool | ❌ | `false` | 设为 `true` 不在 Swagger 文档公开 |
+
+##### 响应模型字段定义
+
+`response_model` 中的每个字段使用数组格式定义：
+
+| 格式 | 说明 |
+|------|------|
+| `field = ["type", "__required__"]` | **必填字段**，无默认值，生成 `field: type` |
+| `field = ["type", "default_value"]` | **可选字段**，有默认值，生成 `field: type = default` |
+| `field = ["object", "__required__", { ... }]` | **嵌套对象**，内部继续定义子字段 |
+
+**支持的类型映射：**
+
+| config.toml 类型 | Python/Pydantic 类型 | 示例 |
+|-------------------|----------------------|------|
+| `str` | `str` | `"hello"` |
+| `int` | `int` | `42` |
+| `float` | `float` | `3.14` |
+| `bool` | `bool` | `true` |
+| `list` | `list` | `[1, 2, 3]` |
+| `object` | `dict` / 嵌套模型 | `{ "nested": ... }` |
+| `any` | `Any` | 任意类型 |
+
+##### 嵌套对象示例
+
+```toml
+response_model = {
+    order_id = ["str", "__required__"],
+    user = ["object", "__required__", {        # 嵌套对象
+        user_id = ["str", "__required__"],
+        name = ["str", "__required__"],
+        balance = ["float", 0.0],
+        level = ["str", "normal"]
+    }],
+    items = ["list", []],
+    timestamp = ["float", 0.0]
+}
+```
+
+这会生成：
+
+```python
+class User(BaseModel):
+    """User"""
+    user_id: str
+    name: str
+    balance: float = 0.0
+    level: str = "normal"
+
+class CalcAddOutput(BaseModel):
+    """calc.add 响应结果模型"""
+    order_id: str
+    user: User
+    items: list = []
+    timestamp: float = 0.0
+```
+
+---
+
+#### 跨 Worker 共享模型（`--shared` + `--output`）
+
+当不同 Worker 之间需要共享数据结构时（如 `order.create` 引用 `user.query` 的响应），可以将共享模型生成到 `public/` 目录，便于其他 Worker 导入。
+
+**步骤 1：在 config.toml 中标记共享 handler**
+
+```toml
+items = [
+    {
+        subject = "user.query",
+        shared = true,            # 标记为共享模型
+        params = ["user_id: str"],
+        response_model = {
+            user_id = ["str", "__required__"],
+            name = ["str", "__required__"],
+            balance = ["float", 0.0],
+            level = ["str", "normal"]
+        }
+    },
+    {
+        subject = "notification.order_created",
+        internal = true,           # 内部 handler，不对外公开
+        # shared = false（默认），不会被 --shared 选中
+        params = ["order_id: str"],
+        response_model = {
+            status = ["str", "notified"]
+        }
+    }
+]
+```
+
+**步骤 2：生成共享模型到 public/ 目录**
+
+```bash
+chongming gen-models example --output workers/example/public/__init__.py --shared
+```
+
+**步骤 3：其他 Worker 导入使用**
+
+```python
+# 在另一个 Worker 中导入共享模型
+from workers.example.public import UserQueryOutput
+```
+
+> **注意：** `shared` 默认值为 `false`，只有显式设为 `true` 的 handler 才会被 `--shared` 选中。这确保了内部 handler 的模型不会被意外暴露。
+
+**覆盖所有文件的场景：**
+
+生成模型后，建议检查生成的代码，确保满足业务需求。如果后续修改了 `config.toml` 或 handler 签名，需要重新生成。
 
 ---
 
@@ -133,12 +345,6 @@ chongming docker-build example
 
 # 构建 Rust Worker
 chongming docker-build example_rs
-
-# 指定标签并推送
-chongming docker-build example --tag registry.example.com/example:v1.0 --push
-
-# 查看部署指南
-chongming docker-build example --help-deploy
 ```
 
 **参数：**
@@ -147,16 +353,8 @@ chongming docker-build example --help-deploy
 |------|------|
 | `name` | 服务名称（必填） |
 | `--tag`, `-t` | 镜像标签，默认 `chongming/<name>:latest` |
-| `--dockerfile`, `-f` | Dockerfile 路径（自动检测） |
 | `--push` | 构建完成后推送到镜像仓库 |
 | `--no-cache` | 构建时不使用缓存 |
-| `--build-arg` | 构建参数，可多次使用（如 `--build-arg KEY=VALUE`） |
-| `--rust-build-mode` | Rust 编译模式：`release`（默认）或 `debug` |
-| `--help-deploy` | 打印生产环境部署指南 |
-
-**自动 Dockerfile 检测：**
-- 包含 `Cargo.toml` → `worker-rust.Dockerfile`
-- 否则 → `worker.Dockerfile`
 
 ---
 
@@ -165,12 +363,8 @@ chongming docker-build example --help-deploy
 使用 PyInstaller 将 Python 代码编译为单文件二进制，再打包为极小 Docker 镜像。**推荐生产部署方式。**
 
 ```bash
-# 构建二进制镜像
-chongming binary-build gateway
+chongming binary-build gateway --tag registry.example.com/gateway:v1.0
 chongming binary-build example
-
-# 推送到镜像仓库
-chongming binary-build gateway --tag registry.example.com/gateway:v1.0 --push
 ```
 
 #### 构建模式对比
@@ -188,8 +382,6 @@ chongming binary-build gateway --tag registry.example.com/gateway:v1.0 --push
 ---
 
 ### `chongming docker` — 管理 Docker 环境
-
-管理 Docker Compose 基础设施。
 
 ```bash
 # 启动所有服务
@@ -212,10 +404,6 @@ chongming docker down
 将 Docker Compose 中使用的所有镜像导出为 tar 文件，便于离线环境部署。
 
 ```bash
-# 导出所有镜像
-chongming image-export
-
-# 指定输出目录
 chongming image-export --output ./images
 ```
 
@@ -223,58 +411,17 @@ chongming image-export --output ./images
 
 ### `chongming log-export` — 导出日志
 
-从 MinIO 对象存储中按条件查询并导出 Worker 或 Gateway 的日志，支持按服务类型、名称、时间范围和日志级别筛选。
+从 MinIO 对象存储中按条件查询并导出 Worker 或 Gateway 的日志。
 
 ```bash
-# 列出 MinIO 中所有可用的服务实例
+# 列出可用的服务实例
 chongming log-export --list-services
-
-# 导出所有 Gateway 日志
-chongming log-export --type gateway
 
 # 导出指定 Worker 最近 1 小时的日志
 chongming log-export --type worker --name example --since 1h
 
-# 导出指定时间范围内的日志
-chongming log-export --type gateway --name api-gateway-1 \
-    --start "2026-05-28T00:00:00Z" --end "2026-05-29T00:00:00Z"
-
-# 导出 DEBUG 级别日志，JSON 格式
-chongming log-export --type worker --name example --level DEBUG --format json
-
-# 保存到文件
-chongming log-export --type worker --name example --since 2h \
-    --output /tmp/example-logs.json
-
-# 查看日志存储统计
-chongming log-export --stats
-```
-
-**参数：**
-
-| 参数 | 说明 |
-|------|------|
-| `--type` | 服务类型：`gateway` 或 `worker` |
-| `--name` | 服务实例名称（如 `api-gateway-1`、`example-worker`） |
-| `--level` | 日志级别过滤（DEBUG/INFO/WARNING/ERROR/CRITICAL） |
-| `--since` | 相对时间范围（如 `1h`、`30m`、`7d`） |
-| `--start` | 起始时间（ISO 格式，如 `2026-05-28T00:00:00Z`） |
-| `--end` | 结束时间（ISO 格式） |
-| `--format` | 输出格式：`text`（默认）或 `json` |
-| `--show-meta` | 显示元数据字段（logger、module、line 等） |
-| `--output`, `-o` | 输出到文件（默认输出到 stdout） |
-| `--list-services` | 列出 MinIO 中所有可用的服务实例 |
-| `--stats` | 显示 MinIO 日志存储统计信息 |
-| `--minio-endpoint` | MinIO 地址（默认 `localhost:9000`） |
-| `--minio-access-key` | MinIO 访问密钥（默认 `minioadmin`） |
-| `--minio-secret-key` | MinIO 密钥 |
-| `--bucket` | 存储桶名称（默认 `chongming-logs`） |
-
-**MinIO 日志路径结构：**
-
-```
-logs/{service_type}/{service_name}/{YYYY}/{MM}/{DD}/{HH}/{uuid}.log[.gz]
-例如: logs/worker/example-worker/2026/05/28/14/abc123.log.gz
+# 导出 DEBUG 级别日志到文件
+chongming log-export --type worker --name example --level DEBUG --output /tmp/logs.json
 ```
 
 ---

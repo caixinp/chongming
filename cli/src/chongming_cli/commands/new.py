@@ -5,6 +5,7 @@ chongming new 命令 - 从模板初始化新 worker（支持 Python 和 Rust）
 import argparse
 import os
 import shutil
+import sys
 
 PROJECT_ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
 _TEMPLATES_DIR = os.path.join(PROJECT_ROOT, "templates")
@@ -94,6 +95,19 @@ def _copy_python_worker(args, target_dir):
     _rewrite_python_main(target_dir, args.name)
 
     print(f"✓ Python Worker '{args.name}' 已创建在 {target_dir}")
+
+    # ── 自动生成 Pydantic 模型 ─────────────────────────────────────
+    print("正在从 config.toml 生成 Pydantic 模型...")
+    try:
+        sys.path.insert(0, os.path.join(PROJECT_ROOT, "utils", "worker", "src"))
+        from chongming_worker.model_gen import write_models_to_disk
+        write_models_to_disk(target_dir)
+        print(f"✓ Pydantic 模型已生成: {os.path.join(target_dir, 'models', '__init__.py')}")
+    except Exception as e:
+        print(f"⚠ 模型生成失败（可稍后手动运行 chongming gen-models {args.name}）: {e}")
+    finally:
+        sys.path.pop(0)
+
     print()
     print("该 worker 基于 example 模板，演示了 WorkerLifespan 框架的全部特性：")
     print("  · 基本 handler 注册（calc.add, calc.subtract 等）")
@@ -102,6 +116,7 @@ def _copy_python_worker(args, target_dir):
     print("  · NATS 连接注入：_nc 参数自动注入")
     print("  · WorkerLifespan 实例注入：_app.nats_connection")
     print("  · 容错处理：request 超时/失败时优雅降级")
+    print("  · Pydantic 输入/输出模型自动生成")
     print()
     print("下一步：")
     print(f"  cd workers/{args.name}")

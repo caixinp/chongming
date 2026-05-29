@@ -18,14 +18,21 @@ import inspect
 import logging
 import signal
 from typing import Any, Callable, Optional, Union
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import wraps
 
 import nats
 from nats.aio.msg import Msg
+from nats.aio.client import Client
 
 from chongming_config import load_config, Config
 from chongming_logging import setup_worker_logging, set_request_id
+
+# 尝试导入 Pydantic，用于检测 BaseModel 子类参数
+try:
+    from pydantic import BaseModel as PydanticBaseModel
+except ImportError:
+    PydanticBaseModel = None  # type: ignore
 
 # 模块加载时自动配置 worker 日志
 setup_worker_logging()
@@ -38,6 +45,21 @@ _RESERVED_PARAMS = {
     "_app": "app",          # WorkerLifespan 实例
     "_nc": "nc",            # NATS 连接对象
 }
+
+
+def _serialize_result(result: Any) -> Any:
+    """递归序列化 handler 返回结果为 JSON 可序列化格式
+
+    如果结果中包含 Pydantic BaseModel 对象（如 handler 返回了模型实例），
+    自动调用 .model_dump() 转换为 dict。
+    """
+    if PydanticBaseModel is not None and isinstance(result, PydanticBaseModel):
+        return result.model_dump()
+    if isinstance(result, dict):
+        return {k: _serialize_result(v) for k, v in result.items()}
+    if isinstance(result, (list, tuple)):
+        return [_serialize_result(v) for v in result]
+    return result
 
 
 @dataclass
@@ -101,7 +123,7 @@ class WorkerLifespan:
         # 从配置读取心跳间隔，默认 15 秒
         self._heartbeat_interval = self.config.get("registration", {}).get("heartbeat_interval", 15)
         self._validate_ttl_config()
-        self.nc: Optional[nats.NATS] = None # type: ignore
+        self.nc: Optional[Client] = None 
         self._handlers: dict[str, HandlerInfo] = {}
         self._subscriptions: list[Any] = []
         self._heartbeat_task: Optional[asyncio.Task] = None
@@ -112,7 +134,7 @@ class WorkerLifespan:
     # 属性：暴露 NATS 连接供 worker 间通讯
     # ----------------------------------------------------------------
     @property
-    def nats_connection(self) -> nats.NATS:
+    def nats_connection(self) -> Client: 
         """获取 NATS 连接对象，用于自定义 NATS 操作"""
         if self.nc is None:
             raise RuntimeError("NATS connection is not established. Call start() first.")
@@ -121,23 +143,39 @@ class WorkerLifespan:
     # ----------------------------------------------------------------
     # 主动通讯 API
     # ----------------------------------------------------------------
-    async def publish(self, subject: str, data: Union[dict, list, str, int, float, bool, None]) -> None:
+    @staticmethod
+    def _serialize_data(data: Any) -> Any:
+        """将数据序列化为 JSON 可序列化格式
+
+        如果数据中包含 Pydantic BaseModel 对象，自动调用 .model_dump() 转换为 dict。
+        """
+        if PydanticBaseModel is not None and isinstance(data, PydanticBaseModel):
+            return data.model_dump()
+        if isinstance(data, dict):
+            return {k: WorkerLifespan._serialize_data(v) for k, v in data.items()}
+        if isinstance(data, (list, tuple)):
+            return [WorkerLifespan._serialize_data(v) for v in data]
+        return data
+
+    async def publish(self, subject: str, data: Any) -> None:
         """
         主动向指定 subject 发布消息（发布-订阅模式）
 
         :param subject: NATS subject
         :param data: 要发布的数据（会被序列化为 JSON）
+                     支持 Pydantic BaseModel 实例，自动转换为 dict
         """
         if self.nc is None:
             raise RuntimeError("NATS connection is not established. Call start() first.")
-        payload = json.dumps(data, default=str).encode()
+        serialized = self._serialize_data(data)
+        payload = json.dumps(serialized, default=str).encode()
         await self.nc.publish(subject, payload)
         logger.debug("Published to '%s': %s", subject, data)
 
     async def request(
         self,
         subject: str,
-        data: Union[dict, list, str, int, float, bool, None],
+        data: Any,
         timeout: float = 5.0,
     ) -> dict:
         """
@@ -146,6 +184,7 @@ class WorkerLifespan:
 
         :param subject: 目标 handler 的 subject
         :param data: 请求数据（会被序列化为 JSON）
+                     支持 Pydantic BaseModel 实例，自动转换为 dict
         :param timeout: 超时时间（秒），默认 5 秒
         :return: 响应数据（JSON dict）
         :raises ValueError: 目标 worker 返回的业务错误
@@ -154,7 +193,8 @@ class WorkerLifespan:
         """
         if self.nc is None:
             raise RuntimeError("NATS connection is not established. Call start() first.")
-        payload = json.dumps(data, default=str).encode()
+        serialized = self._serialize_data(data)
+        payload = json.dumps(serialized, default=str).encode()
         response = await self.nc.request(subject, payload, timeout=timeout)
         result = json.loads(response.data.decode())
         logger.debug("Request to '%s': %s -> %s", subject, data, result)
@@ -311,6 +351,41 @@ class WorkerLifespan:
             return value
 
     # ----------------------------------------------------------------
+    # Pydantic 模型验证（可选）
+    # ----------------------------------------------------------------
+    async def _validate_with_pydantic(self, subject: str, parsed: dict) -> dict:
+        """尝试用自动生成的 Pydantic 模型验证输入参数
+
+        如果存在 models/__init__.py，导入对应 subject 的 Input 模型进行验证。
+        验证通过后返回转换后的参数 dict，失败则抛出异常。
+
+        这是可选的增强功能：没有 models/__init__.py 时降级为普通 dict。
+        """
+        try:
+            # 尝试从 models 包导入输入模型
+            from models import __all__ as model_names  # type: ignore
+
+            # 构建模型类名：subject 的 PascalCase 版本 + "Input"
+            subject_parts = subject.replace("-", "_").replace(".", "_").split("_")
+            model_class_name = "".join(p.capitalize() for p in subject_parts if p) + "Input"
+
+            # 查找对应的  Input 模型
+            if model_class_name not in dir(models):  # type: ignore
+                return parsed
+
+            input_model_class = getattr(models, model_class_name)  # type: ignore
+
+            # 用 pydantic 验证并转换
+            validated = input_model_class(**parsed)
+            return validated.model_dump()
+        except ImportError:
+            # 没有 models 包 → 降级
+            return parsed
+        except Exception as e:
+            logger.warning("Pydantic validation failed for %s (fallback to raw): %s", subject, e)
+            return parsed
+
+    # ----------------------------------------------------------------
     # 内部：消息处理分发
     # ----------------------------------------------------------------
     async def _dispatch_message(self, msg: Msg) -> None:
@@ -325,6 +400,12 @@ class WorkerLifespan:
         - 如果 handler 声明了 ``_app`` 参数，自动注入 ``WorkerLifespan`` 实例
           供 handler 内调用 ``_app.publish()`` 或 ``_app.request()`` 与其他 worker 通讯
         - 如果 handler 声明了 ``_nc`` 参数，自动注入 NATS 连接对象
+
+        Pydantic 模型验证：
+        - 如果 worker 目录下存在 models/__init__.py（由 ``chongming gen-models`` 生成），
+          框架自动使用对应的 Input 模型验证请求参数
+        - 验证通过后参数自动按类型转换（如字符串 "10" → int 10）
+        - 没有 models 包时降级为普通 dict 处理，兼容现有代码
         """
         subject = msg.subject
 
@@ -350,16 +431,40 @@ class WorkerLifespan:
             params_names = handler_info.params_names
 
             if isinstance(parsed, dict):
-                # 标准情况：gateway 传过来的 {"a": "1", "b": "2"} 格式
-                # 根据函数类型注解自动转换参数类型（如 "10" -> 10.0）
-                kwargs = {
-                    k: self._convert_param(
-                        parsed.get(k),
-                        handler_info.params_types.get(k, str),
-                    )
-                    for k in params_names
-                    if k not in _RESERVED_PARAMS  # 保留参数不来自请求数据
-                }
+                # ── Pydantic 模型验证（如果存在 models 包） ────
+                # 自动生成的 models 存在时，用 Input 模型做类型校验和转换
+                validated = await self._validate_with_pydantic(subject, parsed)
+                if validated != parsed:
+                    logger.debug("Pydantic validated & transformed input: %s -> %s", parsed, validated)
+                    parsed = validated
+
+                # ── 构建 handler 参数 ──────────────────────────────
+                # 支持两种 handler 风格：
+                #   风格 A：async def add(a: float, b: float)          — 独立参数
+                #   风格 B：async def add(input: CalcAddInput)          — Pydantic 模型参数
+                #   风格 C：async def add(data: dict)                   — 原始 dict 参数
+                # 框架自动识别参数类型并选择合适的方式构造：
+                #   - 如果参数是 Pydantic BaseModel 子类 → 自动构造模型实例
+                #   - 如果参数是 dict → 直接传递整个 parsed dict
+                #   - 否则 → 按参数名从 parsed 中提取对应值
+                kwargs = {}
+                for k in params_names:
+                    if k in _RESERVED_PARAMS:
+                        continue  # 保留参数不来自请求数据
+                    target_type = handler_info.params_types.get(k)
+                    if target_type is not None and PydanticBaseModel is not None and inspect.isclass(target_type) and issubclass(target_type, PydanticBaseModel):
+                        # 风格 B：参数类型是 Pydantic BaseModel 子类
+                        # 用整个请求 dict 构造模型实例（自动校验和类型转换）
+                        kwargs[k] = target_type(**parsed)
+                    elif target_type is dict:
+                        # 风格 C：参数类型是 dict → 直接传递整个 parsed dict
+                        kwargs[k] = parsed
+                    else:
+                        # 风格 A：按参数名从 parsed 中提取值，并做类型转换
+                        kwargs[k] = self._convert_param(
+                            parsed.get(k),
+                            target_type or str,
+                        )
 
                 # ── 注入框架保留参数 ────────────────────────────
                 kwargs.update(self._build_reserved_kwargs(handler_info))
@@ -371,10 +476,15 @@ class WorkerLifespan:
             # 调用处理函数
             result = await handler_info.func(**kwargs)
 
+            # ── 序列化结果为 JSON 可序列化格式 ──────────────────
+            # 如果 handler 返回了 Pydantic BaseModel 对象（或嵌套了 BaseModel），
+            # 自动转换为 dict，确保 json.dumps 能正常序列化
+            serializable = _serialize_result(result)
+
             # ── 有 reply subject 时才响应 ────────────────────────
             # publish 模式触发的消息没有 reply subject，直接跳过响应
             if msg.reply:
-                response = json.dumps(result, default=str).encode()
+                response = json.dumps(serializable, default=str).encode()
                 if request_id:
                     msg.headers = msg.headers or {}
                     msg.headers["request_id"] = request_id
@@ -419,7 +529,7 @@ class WorkerLifespan:
 
                 if heartbeat_count % reregister_cycles == 0:
                     # 批量续期：一次性续期所有路由，避免逐个发送
-                    await self.nc.publish( # type: ignore
+                    await self.nc.publish(  # type: ignore
                         "service.registry",
                         json.dumps(heartbeat_batch).encode()
                     )

@@ -1,55 +1,102 @@
-# Example Worker — Python Worker 完整功能示例
+# Example Worker — Python Worker 完整功能示例（学习指南）
 
-基于 `chongming-worker` 框架开发的 Python Worker 示例，覆盖框架 **全部核心特性**，既是功能演示也是开发模板。
+基于 `chongming-worker` 框架开发的 Python Worker 示例，覆盖框架 **全部核心特性**。如果你是第一次接触 Chongming，建议从本文档开始，逐步理解 Worker 的每个概念。
+
+---
+
+## 前置知识
+
+在阅读本文前，建议先了解：
+- [Worker 生命周期框架](../../utils/worker/README.md) — Worker 的基本概念和 API
+- [CLI 工具 — config.toml 详解](../../cli/README.md#worker-configtoml-配置详解) — 配置文件完整说明
 
 ---
 
 ## 覆盖的特性
 
-| # | 特性 | handler | 演示要点 |
+这个示例 Worker 演示了 **5 大核心特性**，从简单到复杂逐步深入：
+
+| # | 特性 | Handler | 学习要点 |
 |---|------|---------|----------|
-| 1 | **基本 Handler 注册** | `calc.add/subtract/multiply/divide` | `@app.handler()` 装饰器，纯业务逻辑 |
-| 2 | **被动服务（request 被调用方）** | `user.query` | 被其他 handler 通过 `_app.request()` 调用 |
-| 3 | **主动调用方（request + publish）** | `order.create` | `_app.request()` 同步调用 + `_app.publish()` 异步广播 |
-| 4 | **异步通知接收（publish 接收方）** | `notification.order_created` | 通过 publish 触发的独立 handler |
-| 5 | **NATS 连接注入（_nc）** | `user.health_check` | `_nc` 参数由框架自动注入 |
-| 6 | **框架实例注入（_app）** | `system.info` | `_app.nats_connection` 访问底层连接 |
+| 1 | **基本 Handler 注册** | `calc.add/subtract/multiply/divide` | 最基础的 handler，纯业务逻辑 |
+| 2 | **被动服务** | `user.query` | 被其他 handler 通过 `_app.request()` 调用 |
+| 3 | **主动调用 + 异步广播** | `order.create` | `_app.request()` 同步调用 + `_app.publish()` 异步广播 |
+| 4 | **异步通知接收** | `notification.order_created` | 通过 publish 触发的独立 handler |
+| 5 | **框架注入** | `system.info` / `user.health_check` | `_app` 和 `_nc` 参数由框架自动注入 |
 
 ---
 
 ## 快速开始
 
+### 1. 启动基础设施
+
 ```bash
-# 1. 启动 NATS 集群
-cd docker-env && docker compose up -d
+cd docker-env
+docker compose up -d
 
-# 2. 启动 API Gateway
-cd api_gateway && uv sync && uv run serve
-
-# 3. 启动 Worker
-cd workers/example && uv sync && python main.py
+# 确认 NATS 集群运行中
+docker compose ps
+# 输出应包含 nats-1, nats-2, nats-3
 ```
 
-### 测试所有特性
+### 2. 启动 API Gateway
 
 ```bash
-# ── 特性 1：基本运算 ──────────────────────────────
-curl "http://localhost:8000/api/v1/calc/add?a=10&b=20"       # → {"result": 30}
-curl "http://localhost:8000/api/v1/calc/divide?a=100&b=3"    # → {"result": 33.33}
+cd api_gateway
+uv sync
+uv run serve
 
-# ── 特性 3：Worker 间通讯（request + publish） ────
+# 输出示例:
+# INFO:     Uvicorn running on http://0.0.0.0:8000
+```
+
+### 3. 启动示例 Worker
+
+```bash
+cd workers/example
+uv sync
+python main.py
+
+# 输出示例:
+# INFO:     连接 NATS 成功: nats://localhost:4222
+# INFO:     注册服务成功: example
+# INFO:     已订阅 5 个 subject
+# INFO:     心跳已启动 (间隔: 15s)
+```
+
+### 4. 验证完整链路
+
+```bash
+# 健康检查
+curl http://localhost:8000/health
+
+# ── 特性 1：基本运算 ──────────────────────────────
+curl "http://localhost:8000/api/v1/calc/add?a=10&b=20"
+# → {"result": 30, "operation": "add", "timestamp": 1654321000.0}
+
+curl "http://localhost:8000/api/v1/calc/divide?a=100&b=3"
+# → {"result": 33.33, "operation": "divide", "timestamp": 1654321000.5}
+
+# ── 特性 3：Worker 间通讯 ─────────────────────────
 curl -X POST "http://localhost:8000/api/v1/order/create" \
   -H "Content-Type: application/json" \
   -d '{"user_id": "u001", "amount": 30, "item": "book"}'
-# → 内部调用 user.query → 检查余额 → publish 通知 → 返回订单
+# 内部流程：
+#   1. order.create 调用 user.query 查询用户余额
+#   2. 检查余额充足后创建订单
+#   3. publish 通知 notification.order_created
+#   4. 返回订单信息
+# → {"order_id": "ORD-1654321000", "user": {...}, "item": "book", ...}
 
-# ── 特性 5：健康检查（_nc 注入） ───────────────────
+# ── 特性 5：框架注入 ──────────────────────────────
 curl "http://localhost:8000/api/v1/user/health"
-# → {"status": "healthy", "nats_server": "nats://..."}
+# → {"status": "healthy", "nats_server": "nats://localhost:4222", "timestamp": ...}
 
-# ── 特性 6：系统信息（_app 注入） ─────────────────
 curl "http://localhost:8000/api/v1/system/info"
-# → {"registered_subjects": ["calc.add", "user.query", ...]}
+# → {"status": "ok", "worker_name": "example", "registered_subjects": [...], ...}
+
+# Swagger UI（浏览器打开）
+open http://localhost:8000/docs
 ```
 
 ---
@@ -58,215 +105,324 @@ curl "http://localhost:8000/api/v1/system/info"
 
 ```
 workers/example/
-├── main.py                   # ★ 入口：导入 app → 启动
-├── config.toml               # ★ 核心配置：NATS、路由注册、心跳
-├── pyproject.toml
-├── README.md
-└── app/
-    ├── __init__.py
-    ├── bootstrap.py           # ★ WorkerLifespan 实例 + MinIO 日志初始化
-    └── handlers/
-        ├── __init__.py        # 导入并注册所有 handler 模块
-        ├── calc.py            # 特性 1：纯业务 handler
-        ├── user.py            # 特性 2：被动服务 handler
-        ├── order.py           # 特性 3+4：主动调用 + publish 接收
-        └── system.py          # 特性 5+6：_nc / _app 注入演示
+├── main.py                 # ★ 入口文件（最简单的：导入 app → 启动）
+├── config.toml             # ★ 核心配置文件（定义所有路由和参数）
+├── pyproject.toml          #   Python 项目配置
+├── app/
+│   ├── __init__.py
+│   ├── bootstrap.py        # ★ WorkerLifespan 实例（含 MinIO 日志初始化）
+│   └── handlers/
+│       ├── __init__.py     # ★ 导入并注册所有 handler 模块
+│       ├── calc.py         #   特性 1：纯业务 handler
+│       ├── user.py         #   特性 2：被动服务 handler
+│       ├── order.py        #   特性 3+4：主动调用 + publish 接收
+│       └── system.py       #   特性 5：_nc / _app 注入演示
+└── models/
+    └── __init__.py         #   自动生成的 Pydantic 模型文件
 ```
 
 ---
 
-## 配置参考（config.toml 参数详解）
+## 特性详解
 
-```toml
-# ── Worker 元信息 ──────────────────────────────────────────────────
-[worker]
-name = "example"           # Worker 唯一标识，用于服务注册和日志
-version = "0.1.0"
-description = "..."        # 简要描述
+### 特性 1：基本 Handler 注册
 
-# ── NATS 连接 ──────────────────────────────────────────────────────
-[nats]
-urls = [
-    "nats://localhost:4222",   # NATS 集群节点（支持多节点高可用）
-    "nats://localhost:4223",
-    "nats://localhost:4224"
-]
+**知识点：** 每个 handler 是一个 async 函数，通过 `@app.handler()` 装饰器注册。
 
-# ── 服务注册 ───────────────────────────────────────────────────────
-[registration]
-type = "register"              # 注册方式（固定为 "register"）
-service = "example"            # 服务名，Gateway 用于 URL 路由前缀
-queue_group = "calc-workers"   # 队列组名，同组 worker 实现请求负载均衡
-router_prefix = "/calc"        # Gateway 路由前缀（已弃用，保留兼容）
-tags = ["calculator", "worker-comm-demo"]  # 标签，用于服务分类和过滤
-heartbeat_interval = 15        # 心跳间隔（秒），建议 10~30
-
-# ── 路由定义 ───────────────────────────────────────────────────────
-items = [
-    # 每条路由 = 一个 NATS subject 映射为一个 HTTP API
-
-    {
-        # NATS subject 名，handler 通过 @app.handler("calc.add") 匹配
-        subject = "calc.add",
-        # HTTP 方法
-        method = "GET",
-        # HTTP 路径，Gateway 生成 URL: /api/v1/calc/add
-        path = "/add",
-        # OpenAPI 摘要
-        summary = "Add two numbers",
-        # OpenAPI 详细说明（自动出现在 Swagger UI）
-        docstring = "Add two numbers and return result with metadata",
-        # 参数列表（格式: "参数名: 类型"）
-        params = ["a: float", "b: float"],
-        # TTL（秒），服务注册的有效期，Gateway 缓存时间
-        ttl = 30,
-        # 超时（秒），NATS request 等待响应的最长时间
-        timeout = 2.0,
-        # 响应模型（类型 + 默认值），用于 API 文档和参数校验
-        response_model = {
-            result     = ["float", "__required__"],  # 必填字段
-            operation  = ["str", "add"],             # 可选字段，默认值 "add"
-            timestamp  = ["float", 0.0]
-        }
-    },
-
-    # ── 被动服务：被 _app.request() 调用的内部服务 ─────────────────
-    {
-        subject = "user.query",
-        method = "GET",
-        path = "/user/query",
-        summary = "Query user info",
-        params = ["user_id: str"],
-        ttl = 30,
-        timeout = 2.0,
-        response_model = {
-            user_id   = ["str", "__required__"],
-            name      = ["str", "__required__"],
-            balance   = ["float", 0.0],
-            level     = ["str", "normal"],
-            queried_at = ["float", 0.0]
-        }
-    },
-
-    # ── 主动调用方：request + publish 演示 ─────────────────────────
-    {
-        subject = "order.create",
-        method = "POST",
-        path = "/order/create",
-        summary = "Create order (demonstrates _app.request & _app.publish)",
-        params = ["user_id: str", "amount: float", "item: str"],
-        ttl = 30,
-        timeout = 10.0,   # 超时设长，因内部有两次通讯
-        response_model = {
-            order_id = ["str", "__required__"],
-            user     = ["object", "__required__"],  # 嵌套对象
-            item     = ["str", "__required__"],
-            amount   = ["float", "__required__"],
-            status   = ["str", "created"],
-            timestamp = ["float", 0.0]
-        }
-    },
-
-    # ── 异步通知接收方 ─────────────────────────────────────────────
-    {
-        subject = "notification.order_created",
-        method = "POST",
-        path = "/notification/order_created",
-        params = ["order_id: str", "user_id: str", "user_name: str",
-                  "item: str", "amount: float", "timestamp: float"],
-        ttl = 30,
-        timeout = 2.0,
-        response_model = {
-            status     = ["str", "notified"],
-            message    = ["str", "__required__"],
-            order_id   = ["str", "__required__"],
-            notified_at = ["float", 0.0]
-        },
-        internal = true  # 内部服务，不在 Swagger 文档公开
-    },
-
-    # ── 系统管理（带 _nc 注入） ────────────────────────────────────
-    {
-        subject = "user.health_check",
-        method = "GET",
-        path = "/user/health",
-        params = [],
-        ttl = 30,
-        timeout = 2.0,
-        response_model = {
-            status      = ["str", "__required__"],
-            nats_server = ["str", "__required__"],
-            timestamp   = ["float", 0.0]
-        },
-        internal = true
-    },
-]
-
-# ── MinIO 日志持久化 ────────────────────────────────────────────────
-[logging.minio]
-enabled = true          # 启用 MinIO 日志
-endpoint = "localhost:9000"  # MinIO 服务地址
-bucket = "chongming-logs"      # 日志存储桶
-retention_days = 30     # 日志保留天数
-```
-
-### 参数速查表
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `subject` | string | ✅ | NATS 主题名，handler 通过同名 `@app.handler()` 匹配 |
-| `method` | string | ✅ | HTTP 方法：GET、POST、PUT、DELETE |
-| `path` | string | ✅ | URL 路径，Gateway 组装为 `/api/v1/{service}{path}` |
-| `params` | array | ❌ | 参数列表 `["name: type"]`，用于文档生成 |
-| `ttl` | int | ❌ | 路由注册 TTL（秒），默认 30，需 < `registration.ttl` |
-| `timeout` | float | ❌ | NATS request 超时（秒），默认 2.0 |
-| `response_model` | dict | ❌ | 响应结构定义，用 `["type", 默认值]` 或 `["type", "__required__"]` |
-| `internal` | bool | ❌ | 设为 `true` 不在 Swagger 文档公开 |
-| `tags` | array | ❌ | 路由标签，用于 OpenAPI 分组 |
-
----
-
-## 如何动手
-
-### 添加新 Handler
+**文件：** `app/handlers/calc.py`
 
 ```python
-# app/handlers/hello.py
 from app.bootstrap import app
+import time
 
-@app.handler("hello.world")
-async def hello_world(name: str) -> dict:
-    return {"message": f"Hello, {name}!"}
-
-# app/handlers/__init__.py 中追加：
-from app.handlers import hello   # noqa: F401
+@app.handler("calc.add")
+async def add(a: float, b: float) -> dict:
+    """加法运算"""
+    return {
+        "result": a + b,
+        "operation": "add",
+        "timestamp": time.time(),
+    }
 ```
 
-### 添加新路由
+**对应配置：**
+```toml
+{
+    subject = "calc.add",
+    method = "GET",
+    path = "/add",
+    params = ["a: float", "b: float"],   # 参数名必须与函数参数一致
+    response_model = {
+        result = ["float", "__required__"],
+        operation = ["str", "add"],
+        timestamp = ["float", 0.0]
+    }
+}
+```
+
+✅ 这就是最基础的 handler，纯业务逻辑，没有额外依赖。
+
+---
+
+### 特性 2：被动服务
+
+**知识点：** Handler 可以被其他 handler 通过 `_app.request()` 同步调用。
+
+**文件：** `app/handlers/user.py`
+
+```python
+@app.handler("user.query")
+async def user_query(user_id: str, _app: WorkerLifespan) -> dict:
+    """查询用户信息（被其他 handler 通过 _app.request() 调用）"""
+    # 这里实际应该查数据库，示例返回固定值
+    return {
+        "user_id": user_id,
+        "name": "Alice",
+        "balance": 100.0,
+        "level": "normal",
+        "queried_at": time.time(),
+    }
+```
+
+**使用场景：**
+- 用户服务提供 `user.query` handler
+- 订单服务通过 `_app.request("user.query", {...})` 调用
+
+---
+
+### 特性 3：主动调用 + 异步广播
+
+**知识点：** 一个 handler 可以通过 `_app.request()` 同步调用其他 handler，并通过 `_app.publish()` 发送异步广播。
+
+**文件：** `app/handlers/order.py`
+
+```python
+@app.handler("order.create")
+async def create_order(
+    user_id: str,
+    amount: float,
+    item: str,
+    _app: WorkerLifespan,  # ← 框架自动注入
+) -> dict:
+    # 1. 同步调用：查询用户信息
+    user = await _app.request("user.query", {"user_id": user_id})
+
+    # 2. 业务校验：检查余额
+    if user["balance"] < amount:
+        raise ValueError("余额不足")
+
+    # 3. 创建订单
+    order_id = f"ORD-{int(time.time())}"
+
+    # 4. 异步广播：通知其他服务（不等待响应）
+    await _app.publish("notification.order_created", {
+        "order_id": order_id,
+        "user_id": user_id,
+        "user_name": user["name"],
+        "item": item,
+        "amount": amount,
+        "timestamp": time.time(),
+    })
+
+    return {
+        "order_id": order_id,
+        "user": user,           # 嵌套对象
+        "item": item,
+        "amount": amount,
+        "status": "created",
+        "timestamp": time.time(),
+    }
+```
+
+**数据流图解：**
+
+```
+HTTP POST /api/v1/order/create
+      │
+      ▼
+┌─────────────────────────────────────┐
+│  order.create handler                │
+│                                     │
+│  1. _app.request("user.query")      │──→ user.query handler ──→ 返回用户信息
+│                                     │    ←────────────────────
+│  2. 校验余额是否充足                  │
+│                                     │
+│  3. 创建订单                         │
+│                                     │
+│  4. _app.publish("notification")    │──→ notification.order_created handler
+│                                     │     （异步执行，不等待）
+│  5. 返回订单结果                      │
+└─────────────────────────────────────┘
+```
+
+---
+
+### 特性 4：异步通知接收
+
+**知识点：** 通过 `_app.publish()` 发送的消息，可以被另一个 handler 接收处理。
+
+**文件：** `app/handlers/order.py`（同一文件）
+
+```python
+@app.handler("notification.order_created")
+async def on_order_created(order_id: str, user_id: str, item: str, amount: float, timestamp: float) -> dict:
+    """处理订单创建通知（通过 publish 触发）"""
+    print(f"收到通知：订单 {order_id} 已创建")
+    return {"status": "notified", "message": f"Order {order_id} processed", ...}
+```
+
+**注意：**
+- publish 是 **异步广播**，调用方不等待响应
+- 同一个 Worker 或不同 Worker 都可以订阅相同的 subject
+- 适用于**事件驱动**架构（如发邮件、写日志、更新缓存等）
+
+---
+
+### 特性 5：框架注入
+
+**知识点：** 框架会自动注入两个特殊参数——`_app`（框架实例）和 `_nc`（NATS 连接）。
+
+**文件：** `app/handlers/system.py`
+
+```python
+# _nc 注入：直接操作 NATS 连接
+@app.handler("user.health_check")
+async def health_check(_nc: Nats) -> dict:
+    """获取 NATS 连接状态"""
+    server_info = _nc._nats_connected_server
+    return {
+        "status": "healthy",
+        "nats_server": str(server_info),
+        "timestamp": time.time(),
+    }
+
+# _app 注入：访问框架配置
+@app.handler("system.info")
+async def system_info(_app: WorkerLifespan) -> dict:
+    """查看 Worker 系统信息"""
+    return {
+        "status": "ok",
+        "worker_name": _app.config["worker"]["name"],
+        "registered_subjects": list(_app._handlers.keys()),
+        "heartbeat_interval": _app.config["registration"]["heartbeat_interval"],
+        "timestamp": time.time(),
+    }
+```
+
+**注入规则：**
+
+| 参数名 | 类型 | 说明 |
+|--------|------|------|
+| `_app` | `WorkerLifespan` | 框架实例，可用于 `_app.request()` / `_app.publish()` 或读取配置 |
+| `_nc` | `Nats` | 原始 NATS 连接对象，用于直接操作 NATS |
+
+这两个参数由框架自动注入，**不占用 config.toml 中的 params 位置**。即使 `params = []`，也可以使用这两个参数。
+
+---
+
+## 配置参考（config.toml）
+
+完整的配置说明已迁移到 [CLI 文档 — Worker config.toml 配置详解](../../cli/README.md#worker-configtoml-配置详解)，这里仅列出本示例中使用的参数：
+
+| 字段 | 本示例值 | 说明 |
+|------|----------|------|
+| `heartbeat_interval` | `15` | 心跳间隔 15 秒 |
+| `ttl` | `30` | 路由 TTL 30 秒（≥ 心跳 × 2） |
+| `timeout` | `2.0` / `10.0` | 普通 handler 2 秒，`order.create` 10 秒（因内部有两次通讯） |
+| `internal` | `true` | `notification.order_created` 等内部 handler 不在 Swagger 显示 |
+
+### 关键配置示例
 
 ```toml
-# config.toml [registration] items 中追加：
+# 每个 handler 必填的 4 个字段
 {
-    subject = "hello.world",
-    method = "GET",
-    path = "/hello",
-    summary = "Say hello",
-    params = ["name: str"],
-    ttl = 30,
-    timeout = 2.0,
-    response_model = {
-        message = ["str", "__required__"]
-    }
+    subject = "order.create",       # NATS subject
+    method = "POST",                # HTTP 方法
+    path = "/order/create",         # URL 路径
+    params = ["user_id: str", ...], # 参数列表
+}
+
+# 可选但推荐的字段
+{
+    summary = "创建订单",             # OpenAPI 摘要
+    ttl = 30,                        # TTL
+    timeout = 10.0,                  # 超时
+    response_model = { ... },        # 响应模型
 }
 ```
 
 ---
 
-## 构建部署
+## 如何动手练习
+
+### 练习 1：添加新 Handler
 
 ```bash
-# Docker 镜像
-chongming docker-build example
+# 1. 创建新文件
+cat > workers/example/app/handlers/hello.py << 'EOF'
+from app.bootstrap import app
 
-# 二进制镜像（推荐生产）
-chongming binary-build example --tag registry.example.com/example:v1.0
+@app.handler("hello.world")
+async def hello_world(name: str) -> dict:
+    return {"message": f"Hello, {name}!"}
+EOF
+
+# 2. 注册到 __init__.py
+echo "from app.handlers import hello  # noqa: F401" >> workers/example/app/handlers/__init__.py
+
+# 3. 在 config.toml 的 items 中添加：
+# {
+#     subject = "hello.world",
+#     method = "GET",
+#     path = "/hello",
+#     summary = "Say hello",
+#     params = ["name: str"],
+#     response_model = {
+#         message = ["str", "__required__"]
+#     }
+# }
+
+# 4. 重启 Worker（Ctrl+C 重新运行 python main.py）
+
+# 5. 测试
+# curl "http://localhost:8000/api/v1/hello?name=chongming"
+```
+
+### 练习 2：体验 _app.request
+
+```bash
+# order.create 内部调用了 user.query
+# 运行后观察 Worker 日志
+curl -X POST "http://localhost:8000/api/v1/order/create" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "u001", "amount": 30, "item": "book"}'
+```
+
+### 练习 3：生成模型
+
+```bash
+# 生成 Pydantic 模型（自动从 config.toml 生成）
+chongming gen-models example
+
+# 查看生成的模型
+cat workers/example/models/__init__.py
+```
+
+---
+
+## 常见问题
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| Worker 启动时 `连接 NATS 失败` | NATS 未启动 | 先启动 `docker compose up -d` |
+| Gateway 返回 502 | Worker 未启动或路由未注册 | 确认 Worker 日志显示 `注册成功` |
+| `_app.request()` 超时 | 目标 handler 未注册或 NATS 连接异常 | 检查目标 Worker 是否运行 |
+| 参数类型错误 | config.toml 的 params 类型注解与 handler 不一致 | 确保类型匹配 |
+
+---
+
+## 下一步
+
+- 阅读 [CLI 工具文档](../../cli/README.md) 了解如何构建和部署
+- 阅读 [Docker 部署文档](../../docker-env/README.md) 了解生产环境配置
+- 尝试创建自己的 Worker：`chongming new my-worker`
