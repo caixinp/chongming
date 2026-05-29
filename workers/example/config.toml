@@ -1,7 +1,7 @@
 [worker]
 name = "example"
 version = "0.1.0"
-description = "chongming worker example"
+description = "chongming worker example — covers all WorkerLifespan features"
 
 [nats]
 urls = [
@@ -12,12 +12,13 @@ urls = [
 
 [registration]
 type = "register"
-service = "calc"
+service = "example"
 queue_group = "calc-workers"  # Queue Group 名称，同 group 的 worker 实现负载均衡
 router_prefix = "/calc"
-tags = ["calculator"]
+tags = ["example"]
 heartbeat_interval = 15  # 心跳间隔（秒），TTL 必须大于此值
 items = [
+    # ── 基础运算（纯业务逻辑） ────────────────────────────────────
     {
         subject = "calc.add",
         method = "GET",
@@ -77,5 +78,109 @@ items = [
             operation = ["str", "divide"],
             timestamp = ["float", 0.0]
         }
+    },
+    # ── Worker 间通讯：被动服务（被 _app.request() 调用） ──────────
+    {
+        subject = "user.query",
+        method = "GET",
+        path = "/user/query",
+        summary = "Query user info (worker-to-worker: passive responder)",
+        docstring = "Query user information by user_id. Used by order.create via _app.request()",
+        params = ["user_id: str"],
+        ttl = 30,
+        timeout = 2.0,
+        response_model = {
+            user_id = ["str", "__required__"],
+            name = ["str", "__required__"],
+            balance = ["float", 0.0],
+            level = ["str", "normal"],
+            queried_at = ["float", 0.0]
+        }
+    },
+    # ── Worker 间通讯：主动调用方（_app.request + _app.publish） ──
+    {
+        subject = "order.create",
+        method = "POST",
+        path = "/order/create",
+        summary = "Create order (demonstrates _app.request & _app.publish)",
+        docstring = "Create order. Internally calls user.query (request mode) and notification.order_created (pub/sub mode). Demonstrates _app injection for worker-to-worker communication.",
+        params = ["user_id: str", "amount: float", "item: str"],
+        ttl = 30,
+        timeout = 10.0,
+        response_model = {
+            order_id = ["str", "__required__"],
+            user = ["object", "__required__", {
+                user_id = ["str", "__required__"],
+                name = ["str", "__required__"],
+                balance = ["float", 0.0],
+                level = ["str", "normal"],
+                queried_at = ["float", 0.0]
+            }],
+            item = ["str", "__required__"],
+            amount = ["float", "__required__"],
+            status = ["str", "created"],
+            timestamp = ["float", 0.0]
+        }
+    },
+    # ── Worker 间通讯：异步通知接收方（通过 publish() 触发） ──────
+    {
+        subject = "notification.order_created",
+        method = "POST",
+        path = "/notification/order_created",
+        summary = "Order created notification (pub/sub pattern)",
+        docstring = "Process order creation notification. Fanned out via _app.publish() and runs independently.",
+        params = ["order_id: str", "user_id: str", "user_name: str", "item: str", "amount: float", "timestamp: float"],
+        ttl = 30,
+        timeout = 2.0,
+        response_model = {
+            status = ["str", "notified"],
+            message = ["str", "__required__"],
+            order_id = ["str", "__required__"],
+            notified_at = ["float", 0.0]
+        },
+        internal = true
+    },
+    # ── NATS 连接注入（_nc 参数演示） ─────────────────────────────
+    {
+        subject = "user.health_check",
+        method = "GET",
+        path = "/user/health",
+        summary = "Health check via _nc (raw NATS connection injection)",
+        docstring = "Health check that uses _nc (raw NATS connection) injected by the framework",
+        params = [],
+        ttl = 30,
+        timeout = 2.0,
+        response_model = {
+            status = ["str", "__required__"],
+            nats_server = ["str", "__required__"],
+            timestamp = ["float", 0.0]
+        },
+        internal = true
+    },
+    # ── WorkerLifespan 实例注入（_app.nats_connection 演示） ──────
+    {
+        subject = "system.info",
+        method = "GET",
+        path = "/system/info",
+        summary = "System info via _app.nats_connection (WorkerLifespan injection)",
+        docstring = "Returns system info by accessing _app.nats_connection property",
+        params = [],
+        ttl = 30,
+        timeout = 2.0,
+        response_model = {
+            status = ["str", "__required__"],
+            nats_server = ["str", "__required__"],
+            worker_name = ["str", "__required__"],
+            registered_subjects = ["list", []],
+            heartbeat_interval = ["float", 15.0],
+            timestamp = ["float", 0.0]
+        },
+        internal = true
     }
 ]
+
+[logging.minio]
+enabled = true
+endpoint = "localhost:9000"
+bucket = "chongming-logs"
+retention_days = 30

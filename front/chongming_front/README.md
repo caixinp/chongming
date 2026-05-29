@@ -4,7 +4,7 @@
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF.svg)](https://vite.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6.svg)](https://www.typescriptlang.org/)
 
-Chongming 微服务管理前端面板，基于 Vue 3 + Vite + TypeScript 构建，提供可视化的服务管理界面。
+Chongming 微服务管理前端面板，基于 **Vue 3 + Vite + TypeScript** 构建，提供可视化的服务管理界面，方便监控 Worker 状态、查看路由注册和调试 API。
 
 ---
 
@@ -12,19 +12,20 @@ Chongming 微服务管理前端面板，基于 Vue 3 + Vite + TypeScript 构建�
 
 | 技术 | 用途 |
 |------|------|
-| **Vue 3** (Composition API) | 前端框架 |
+| **Vue 3** (Composition API + `<script setup>`) | 前端框架 |
 | **Vue Router** | 客户端路由 |
 | **Pinia** | 状态管理 |
-| **Vite** | 构建工具 |
-| **TypeScript** | 类型安全 |
+| **Vite 6** | 构建工具 |
+| **TypeScript 5.7** | 类型安全 |
 
 ---
 
 ## 快速开始
 
 ```bash
-# 安装依赖
 cd front/chongming_front
+
+# 安装依赖
 npm install
 
 # 启动开发服务器（热重载）
@@ -32,26 +33,10 @@ npm run dev
 
 # 生产构建
 npm run build
+
+# 预览生产构建
+npm run preview
 ```
-
----
-
-## 开发配置
-
-### 推荐的 IDE 设置
-
-- [VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar)
-- 推荐禁用 Vetur，使用 Volar
-
-### 推荐的浏览器
-
-- Chromium 内核浏览器（Chrome、Edge、Brave 等）：
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [在 Chrome DevTools 中启用 Custom Object Formatter](http://bit.ly/object-formatters)
-
-### TypeScript 支持
-
-`.vue` 文件的类型推断需要 Volar 支持。构建时使用 `vue-tsc` 替代 `tsc` 进行类型检查。
 
 ---
 
@@ -61,20 +46,20 @@ npm run build
 src/
 ├── main.ts              # 应用入口
 ├── App.vue              # 根组件
-├── router/              # 路由配置
-│   └── index.ts
-├── stores/              # Pinia 状态管理
-│   └── counter.ts
-├── views/               # 页面组件
-│   ├── HomeView.vue
-│   └── AboutView.vue
-├── components/          # 通用组件
-│   ├── HelloWorld.vue
+├── router/
+│   └── index.ts         # 路由配置（HomeView / AboutView）
+├── stores/
+│   └── counter.ts       # Pinia 状态管理示例
+├── views/
+│   ├── HomeView.vue     # 首页
+│   └── AboutView.vue    # 关于页面
+├── components/
+│   ├── HelloWorld.vue   # 示例组件
 │   ├── TheWelcome.vue
 │   └── WelcomeItem.vue
-├── assets/              # 静态资源
-│   ├── main.css
-│   ├── base.css
+├── assets/
+│   ├── main.css         # 全局样式
+│   ├── base.css         # 基础样式
 │   └── logo.svg
 └── icons/               # SVG 图标组件
     ├── IconCommunity.vue
@@ -83,6 +68,22 @@ src/
     ├── IconSupport.vue
     └── IconTooling.vue
 ```
+
+---
+
+## 开发配置
+
+### 推荐的 IDE 设置
+
+- [VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) 扩展
+- 推荐**禁用 Vetur**，使用 Volar
+- 配合 TypeScript Vue Plugin (Volar) 获得 `.vue` 文件类型推断
+
+### 推荐的浏览器
+
+- Chromium 内核浏览器（Chrome、Edge、Brave 等）
+- [Vue.js Devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
+- 在 Chrome DevTools 中[启用 Custom Object Formatter](http://bit.ly/object-formatters)
 
 ---
 
@@ -103,3 +104,27 @@ src/
 - [Vite 配置](https://vite.dev/config/)
 - [Vue Router](https://router.vuejs.org/)
 - [Pinia](https://pinia.vuejs.org/)
+- [Vue 3 文档](https://vuejs.org/)
+
+---
+
+## 与后端集成
+
+管理面板需要与运行中的 API Gateway 配合使用。默认配置下：
+
+- 开发服务器运行在 `http://localhost:5173`
+- API Gateway 运行在 `http://localhost:8000`
+- 通过 Vite 代理配置转发 API 请求
+
+```typescript
+// vite.config.ts 示例
+export default defineConfig({
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
+});

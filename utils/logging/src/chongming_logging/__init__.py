@@ -133,3 +133,18 @@ def setup_gateway_logging(
 # 模块加载时自动配置日志（确保用户若不手动配置也能看到日志）
 _ensure_request_id_filter()
 setup_logging()
+
+
+# ── 条件导出 MinIO 日志模块 ───────────────────────────────────────────
+try:
+    from .minio_logger import (  # type: ignore[misc]
+        MinioLogHandler,
+        MinioLogConfig,
+        ServiceType,
+        add_minio_logging,
+        setup_worker_minio_logging,
+        setup_gateway_minio_logging,
+    )
+except ImportError:
+    # minio 包未安装时静默降级
+    pass

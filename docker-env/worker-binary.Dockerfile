@@ -29,9 +29,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     binutils \
     && rm -rf /var/lib/apt/lists/*
 
-# Step 4: Install all dependencies + pyinstaller
+# Step 4: Configure pip mirror for faster downloads and install build dependencies
+RUN pip config set global.index-url https://mirrors.ustc.edu.cn/pypi/web/simple/
+
+# Step 5: Install build dependencies first (wheel, setuptools) to avoid download timeouts
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir \
+    pip install --no-cache-dir --default-timeout=120 \
+    setuptools wheel
+
+# Step 6: Install all dependencies + pyinstaller
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir --default-timeout=120 \
     ./utils/config \
     ./utils/logging \
     ./utils/cache \
@@ -40,7 +48,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     ./workers/${WORKER_NAME} \
     pyinstaller
 
-# Step 5: 删除 mypyc 编译的 .so 文件
+# Step 7: 删除 mypyc 编译的 .so 文件
 # tomli 等依赖的 mypyc 编译会产生随机命名模块（如 955cd85d__mypyc），
 # PyInstaller 无法自动发现，运行时会导致 ModuleNotFoundError。
 # 注意：mypyc 编译会替换原始 .py 文件，删除 .so 后纯 Python 回退代码不存在，
@@ -49,14 +57,14 @@ RUN find /usr/local/lib/python3.12/site-packages -name "*.so" -path "*mypyc*" -d
     find /usr/local/lib/python3.12/site-packages -name "*.cpython-*.so" -delete 2>/dev/null; \
     echo "Deleted mypyc compiled .so files"
 
-# Step 5.1: 重新安装被 mypyc 覆盖的依赖为纯 Python 版本
+# Step 7.1: 重新安装被 mypyc 覆盖的依赖为纯 Python 版本
 # mypyc 编译会替换包的 .py 源文件为 .so，删除 .so 后 module 消失导致 ImportError。
 # 需要强制重新安装纯 Python 版本以保证 PyInstaller 运行时能找到模块。
 # 目前已知受影响依赖：tomli
 RUN pip install --no-compile --force-reinstall --no-binary tomli tomli; \
     echo "Reinstalled tomli as pure Python (no mypyc compilation)"
 
-# Step 6: Build single binary with PyInstaller
+# Step 8: Build single binary with PyInstaller
 # 注意: config.toml 通过 --add-data 嵌入二进制，运行时在 sys._MEIPASS
 # 生产 stage 会单独从 source 复制 config.toml 到 /app/，确保 CWD 中可读取
 RUN pyinstaller --onefile \

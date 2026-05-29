@@ -1,4 +1,4 @@
-//! Example Rust Worker using the `chongming-worker` lifespan framework.
+//! Example_rs Rust Worker using the `chongming-worker` lifespan framework.
 //!
 //! This demonstrates how to use the [`chongming_worker::WorkerBuilder`] to
 //! quickly create a NATS-based worker with:

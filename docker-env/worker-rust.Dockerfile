@@ -66,8 +66,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the compiled Rust binary
 COPY --from=builder /build/worker /app/worker
 
-# Copy production config
-COPY workers/${WORKER_NAME}/config.toml /app/config.toml
+# Copy production config (from public/ directory, same as Python worker)
+COPY workers/${WORKER_NAME}/public/config.toml /app/config.toml
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \

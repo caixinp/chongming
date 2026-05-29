@@ -7,6 +7,7 @@ Worker Lifespan Framework
 - 服务注册与心跳
 - 消息分发与参数解析
 - 优雅关闭
+- **Worker 间通讯支持（publish / request）**
 
 开发者只需专注于业务逻辑函数的实现。
 """
@@ -16,8 +17,8 @@ import json
 import inspect
 import logging
 import signal
-from typing import Any, Callable, Optional
-from dataclasses import dataclass
+from typing import Any, Callable, Optional, Union
+from dataclasses import dataclass, field
 from functools import wraps
 
 import nats
@@ -31,6 +32,13 @@ setup_worker_logging()
 
 logger = logging.getLogger("chongming.worker")
 
+# 保留参数列表：框架可以自动注入这些参数到 handler 函数中
+# 如果 handler 的某个参数名在此列表中，框架会自动填充对应值
+_RESERVED_PARAMS = {
+    "_app": "app",          # WorkerLifespan 实例
+    "_nc": "nc",            # NATS 连接对象
+}
+
 
 @dataclass
 class HandlerInfo:
@@ -39,6 +47,8 @@ class HandlerInfo:
     subject: str
     params_names: list[str]
     params_types: dict[str, type]
+    needs_app: bool = False          # 是否需要注入 WorkerLifespan 实例
+    needs_nc: bool = False           # 是否需要注入 NATS 连接
 
 
 class WorkerLifespan:
@@ -63,6 +73,27 @@ class WorkerLifespan:
 
         if __name__ == "__main__":
             app.run()
+
+    Worker 间通讯示例::
+
+        app = WorkerLifespan("config.toml")
+
+        @app.handler("order.create")
+        async def create_order(user_id: str, amount: float, _app: WorkerLifespan) -> dict:
+            # 同步调用另一个 worker 的服务
+            user_info = await _app.request("user.query", {"user_id": user_id}, timeout=3.0)
+
+            # 或者异步通知（发布-订阅模式）
+            await _app.publish("notification.order_created", {
+                "user_id": user_id,
+                "amount": amount,
+            })
+
+            return {"order_id": "ord_123", "user": user_info}
+
+        @app.handler("user.query")
+        async def query_user(user_id: str) -> dict:
+            return {"user_id": user_id, "name": "Alice", "balance": 100.0}
     """
 
     def __init__(self, config_path: str = "config.toml"):
@@ -76,6 +107,77 @@ class WorkerLifespan:
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._running = False
         self._shutdown_event = asyncio.Event()
+
+    # ----------------------------------------------------------------
+    # 属性：暴露 NATS 连接供 worker 间通讯
+    # ----------------------------------------------------------------
+    @property
+    def nats_connection(self) -> nats.NATS:
+        """获取 NATS 连接对象，用于自定义 NATS 操作"""
+        if self.nc is None:
+            raise RuntimeError("NATS connection is not established. Call start() first.")
+        return self.nc
+
+    # ----------------------------------------------------------------
+    # 主动通讯 API
+    # ----------------------------------------------------------------
+    async def publish(self, subject: str, data: Union[dict, list, str, int, float, bool, None]) -> None:
+        """
+        主动向指定 subject 发布消息（发布-订阅模式）
+
+        :param subject: NATS subject
+        :param data: 要发布的数据（会被序列化为 JSON）
+        """
+        if self.nc is None:
+            raise RuntimeError("NATS connection is not established. Call start() first.")
+        payload = json.dumps(data, default=str).encode()
+        await self.nc.publish(subject, payload)
+        logger.debug("Published to '%s': %s", subject, data)
+
+    async def request(
+        self,
+        subject: str,
+        data: Union[dict, list, str, int, float, bool, None],
+        timeout: float = 5.0,
+    ) -> dict:
+        """
+        向指定 subject 发送请求并等待响应（请求-回复模式）
+        用于 worker 之间同步调用：A worker 请求 B worker 的服务。
+
+        :param subject: 目标 handler 的 subject
+        :param data: 请求数据（会被序列化为 JSON）
+        :param timeout: 超时时间（秒），默认 5 秒
+        :return: 响应数据（JSON dict）
+        :raises ValueError: 目标 worker 返回的业务错误
+        :raises asyncio.TimeoutError: 超时未收到响应
+        :raises RuntimeError: NATS 未连接
+        """
+        if self.nc is None:
+            raise RuntimeError("NATS connection is not established. Call start() first.")
+        payload = json.dumps(data, default=str).encode()
+        response = await self.nc.request(subject, payload, timeout=timeout)
+        result = json.loads(response.data.decode())
+        logger.debug("Request to '%s': %s -> %s", subject, data, result)
+        # ── 目标 worker 返回的业务错误 → 提升为异常 ─────────────┐
+        # 其他 worker 的 handler 抛出的异常会被 _dispatch_message
+        # 捕获并返回 {"error": "错误信息"} 格式的响应。
+        # request() 应将其转为 ValueError 抛出，使调用方可以通过
+        # try/except 捕获并得体地处理（如降级、重试）。
+        if isinstance(result, dict) and "error" in result:
+            raise ValueError(result["error"])
+        return result
+
+    # ----------------------------------------------------------------
+    # 内部：保留参数自动注入
+    # ----------------------------------------------------------------
+    def _build_reserved_kwargs(self, handler_info: HandlerInfo) -> dict:
+        """为 handler 构建框架自动注入的保留参数"""
+        kwargs = {}
+        if handler_info.needs_app:
+            kwargs["_app"] = self
+        if handler_info.needs_nc:
+            kwargs["_nc"] = self.nc
+        return kwargs
 
     def _validate_ttl_config(self):
         """校验 TTL 配置的合理性：TTL 必须至少大于心跳间隔，否则路由会在心跳到来前被清理"""
@@ -111,13 +213,17 @@ class WorkerLifespan:
         处理器函数签名要求：
         - 参数名与配置中 registration.items[].params 一一对应
         - 返回 dict，按 response_model 结构返回数据
+        - **支持保留参数注入**：如果参数名为 ``_app``，自动注入 ``WorkerLifespan`` 实例；
+          如果参数名为 ``_nc``，自动注入 NATS 连接对象。
 
-        示例::
+        Worker 间通讯示例::
 
-            @app.handler("calc.add")
-            async def add(a: float, b: float) -> dict:
-                result = a + b
-                return {"result": result, "operation": "add", "timestamp": time.time()}
+            @app.handler("order.create")
+            async def create_order(user_id: str, amount: float, _app: WorkerLifespan) -> dict:
+                # 调用其他 worker 的服务
+                user_info = await _app.request("user.query", {"user_id": user_id})
+                await _app.publish("notification.order_created", {"user_id": user_id})
+                return {"order_id": "ord_123", "user": user_info}
         """
         def decorator(func: Callable) -> Callable:
             nonlocal subject
@@ -144,11 +250,17 @@ class WorkerLifespan:
                 if name in annotations and annotations[name] is not inspect.Parameter.empty:
                     params_types[name] = annotations[name]
 
+            # 检查是否使用了保留参数（_app, _nc）
+            needs_app = "_app" in param_names
+            needs_nc = "_nc" in param_names
+
             self._handlers[subject] = HandlerInfo(
                 func=func,
                 subject=subject,
                 params_names=param_names,
                 params_types=params_types,
+                needs_app=needs_app,
+                needs_nc=needs_nc,
             )
 
             @wraps(func)
@@ -208,6 +320,11 @@ class WorkerLifespan:
         - 从 msg.headers 中提取 Gateway 生成的 request_id
         - 写入当前协程的 contextvars，使日志自动带上 [request_id]
         - 在 msg.respond() 响应头中回传 request_id，Gateway 端可验证一致性
+
+        Worker 间通讯支持：
+        - 如果 handler 声明了 ``_app`` 参数，自动注入 ``WorkerLifespan`` 实例
+          供 handler 内调用 ``_app.publish()`` 或 ``_app.request()`` 与其他 worker 通讯
+        - 如果 handler 声明了 ``_nc`` 参数，自动注入 NATS 连接对象
         """
         subject = msg.subject
 
@@ -241,7 +358,12 @@ class WorkerLifespan:
                         handler_info.params_types.get(k, str),
                     )
                     for k in params_names
+                    if k not in _RESERVED_PARAMS  # 保留参数不来自请求数据
                 }
+
+                # ── 注入框架保留参数 ────────────────────────────
+                kwargs.update(self._build_reserved_kwargs(handler_info))
+
             else:
                 # 非 dict 的 JSON 值（如裸字符串、数字）- 作为唯一参数传入
                 kwargs = {params_names[0]: parsed} if params_names else {}
@@ -249,53 +371,45 @@ class WorkerLifespan:
             # 调用处理函数
             result = await handler_info.func(**kwargs)
 
-            # 序列化结果，并通过响应 Header 回传 request_id
-            response = json.dumps(result, default=str).encode()
-            # 设置 msg.headers 让 respond() 自动带上这些响应头
-            if request_id:
-                msg.headers = msg.headers or {}
-                msg.headers["request_id"] = request_id
-            await msg.respond(response)
+            # ── 有 reply subject 时才响应 ────────────────────────
+            # publish 模式触发的消息没有 reply subject，直接跳过响应
+            if msg.reply:
+                response = json.dumps(result, default=str).encode()
+                if request_id:
+                    msg.headers = msg.headers or {}
+                    msg.headers["request_id"] = request_id
+                await msg.respond(response)
 
             logger.info("Handled %s: %s -> %s", subject, kwargs, result)
 
         except Exception as e:
             logger.error("Error handling %s: %s", subject, e)
-            error_response = json.dumps({"error": str(e)}).encode()
-            try:
-                if request_id:
-                    msg.headers = msg.headers or {}
-                    msg.headers["request_id"] = request_id
-                await msg.respond(error_response)
-            except Exception:
-                pass
+            # ── 有 reply subject 时才响应错误 ──────────────────
+            if msg.reply:
+                error_response = json.dumps({"error": str(e)}).encode()
+                try:
+                    if request_id:
+                        msg.headers = msg.headers or {}
+                        msg.headers["request_id"] = request_id
+                    await msg.respond(error_response)
+                except Exception:
+                    pass
 
     # ----------------------------------------------------------------
     # 内部：心跳
     # ----------------------------------------------------------------
     async def _heartbeat_loop(self) -> None:
-        """定期发送心跳到网关，同时批量续期所有路由以确保 gateway 重启后路由快速恢复
-
-        心跳机制说明：
-        - 每次循环：逐个发送每个 subject 的心跳消息（type=heartbeat），续期单个路由
-        - 每 reregister_cycles 次循环：发送批量续期心跳（type=heartbeat, subjects=[...]），
-          一次性续期所有路由，替代原先发送 type=register 导致路由删除重建的不稳定方式
-        - NATS 重连时（_on_reconnected）：发送完整注册（type=register），因为此时
-          gateway 可能已清空所有路由，需要重建
-        """
+        """定期发送心跳到网关，同时批量续期所有路由以确保 gateway 重启后路由快速恢复"""
         heartbeat_per_subject = {
             "type": "heartbeat",
             "service": self.config["registration"]["service"],
         }
         # 批量心跳携带完整的注册信息 items，以便网关在路由丢失时自动重建路由
-        # 这样既能避免定期 type=register 触发路由删除重建的窗口期，
-        # 又能应对 gateway 重启后 routes_registry 清空、路由需要恢复的场景
         heartbeat_batch = dict(self.config["registration"])
         heartbeat_batch["type"] = "heartbeat"
         heartbeat_batch["subjects"] = [item["subject"] for item in self.config["registration"]["items"]]
         heartbeat_count = 0
         # 批量续期周期：每 N 次心跳后批量续期一次，确保 gateway 重启后路由能快速恢复
-        # 相比于原来发送 type=register 触发路由删除重建，这种方式更稳定
         reregister_cycles = 3
         while self._running:
             # 使用可配置的心跳间隔
@@ -305,7 +419,6 @@ class WorkerLifespan:
 
                 if heartbeat_count % reregister_cycles == 0:
                     # 批量续期：一次性续期所有路由，避免逐个发送
-                    # 替代原先发送 type=register 导致路由删除重建的不稳定方式
                     await self.nc.publish( # type: ignore
                         "service.registry",
                         json.dumps(heartbeat_batch).encode()

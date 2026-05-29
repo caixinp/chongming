@@ -11,6 +11,7 @@ from .commands.gateway import add_gateway_parser, handle_gateway
 from .commands.worker import add_worker_parser, handle_worker
 from .commands.docker import add_docker_parser, handle_docker
 from .commands.image_export import add_image_export_parser, handle_image_export
+from .commands.log_export import add_log_export_parser, handle_log_export
 
 
 def main():
@@ -41,6 +42,9 @@ def main():
     # image-export 命令（导出所有 Docker 镜像为 tar 包用于离线部署）
     add_image_export_parser(subparsers)
 
+    # log-export 命令（从 MinIO 导出指定 worker/gateway 的日志）
+    add_log_export_parser(subparsers)
+
     args = parser.parse_args()
 
     if args.command == "new":
@@ -57,6 +61,8 @@ def main():
         handle_docker(args)
     elif args.command == "image-export":
         handle_image_export(args)
+    elif args.command == "log-export":
+        handle_log_export(args)
     else:
         parser.print_help()
         sys.exit(1)

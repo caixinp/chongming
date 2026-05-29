@@ -14,3 +14,9 @@ type = "pgsql"
 
 [cleanup]
 interval = 10  # 过期路由清理检查间隔（秒），TTL 必须大于此值
+
+[logging.minio]
+enabled = true
+endpoint = "localhost:9000"
+bucket = "chongming-logs"
+retention_days = 30

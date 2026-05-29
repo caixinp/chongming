@@ -182,23 +182,23 @@ services:
   #   方案 B: 先 chongming binary-build example_rs --tag chongming/example_rs:latest
   #           然后取消注释 image，注释 build
   #
-  # example-rs-worker:
-  #   build:
-  #     context: ..
-  #     dockerfile: docker-env/worker-rust.Dockerfile
-  #     args:
-  #       WORKER_NAME: example_rs
-  #   # image: chongming/example_rs:latest
-  #   container_name: example-rs-worker
-  #   restart: unless-stopped
-  #   networks:
-  #     - microservices-net
-  #   depends_on:
-  #     nats-1:
-  #       condition: service_started
-  #     nats-2:
-  #       condition: service_started
-  #     nats-3:
-  #       condition: service_started
-  #   environment:
-  #     - NATS_SERVERS=nats://nats-1:4222,nats://nats-2:4222,nats://nats-3:4222
+  example-rs-worker:
+    # build:
+    #   context: ..
+    #   dockerfile: docker-env/worker-rust.Dockerfile
+    #   args:
+    #     WORKER_NAME: example_rs
+    image: chongming/example_rs:latest
+    container_name: example-rs-worker
+    restart: unless-stopped
+    networks:
+      - microservices-net
+    depends_on:
+      nats-1:
+        condition: service_started
+      nats-2:
+        condition: service_started
+      nats-3:
+        condition: service_started
+    environment:
+      - NATS_SERVERS=nats://nats-1:4222,nats://nats-2:4222,nats://nats-3:4222

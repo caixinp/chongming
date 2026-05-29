@@ -7,8 +7,7 @@ import asyncio
 from typing import List, Optional, Dict, Any, Type, Union, Tuple
 import re
 from pydantic import BaseModel, create_model
-from chongming_lock import MutexLock, LockNotAcquiredError
-from chongming_logging import set_request_id, get_request_id
+from chongming_logging import set_request_id
 
 logger = logging.getLogger("chongming.gateway.dynamic_route")
 
@@ -20,6 +19,7 @@ _TYPE_MAP: Dict[str, type] = {
     "bool": bool,
     "dict": dict,
     "list": list,
+    "object": dict,
     "any": Any, # type: ignore
 }
 
@@ -91,8 +91,31 @@ class DynamicRoute:
         self,
         model_def: Union[Dict[str, Any], Type[BaseModel], List[str], None],
         subject: str = "",
+        depth: int = 0,
     ) -> Optional[Type[BaseModel]]:
-        """动态创建 Pydantic response_model。"""
+        """动态创建 Pydantic response_model。
+
+        支持嵌套 object 定义，例如：:
+
+            response_model = {
+                "user": ["object", "__required__", {
+                    "name": ["str", "__required__"],
+                    "balance": ["float", 0.0],
+                    "address": ["object", "__required__", {
+                        "city": ["str", "__required__"],
+                        "zip": ["str", ""]
+                    }]
+                }],
+                "items": ["list", []],
+                "count": ["int", 0]
+            }
+
+        递归生成嵌套的 Pydantic 模型，在 OpenAPI schema 中完整呈现嵌套结构。
+        """
+        # 防止无限递归
+        if depth > 10:
+            raise ValueError(f"Response model nesting too deep (max 10) for subject '{subject}'")
+
         if model_def is None:
             return None
 
@@ -101,17 +124,37 @@ class DynamicRoute:
 
         model_name_prefix = self._model_name_from_subject(subject)
         model_name = f"{model_name_prefix}Response"
+        if depth > 0:
+            # 嵌套模型使用唯一的名称防止冲突
+            model_name = f"{model_name_prefix}Nested{depth}"
 
         if isinstance(model_def, dict):
             normalized_fields = {}
             for field_name, field_type in model_def.items():
                 if isinstance(field_type, (tuple, list)):
-                    type_spec, default = field_type[0], field_type[1]
-                    resolved_type = self._resolve_type(type_spec)
-                    if isinstance(default, str) and default == "__required__":
-                        normalized_fields[field_name] = (resolved_type, ...)
+                    type_spec = field_type[0]
+                    default = field_type[1] if len(field_type) > 1 else None
+                    nested_schema = field_type[2] if len(field_type) > 2 else None
+
+                    # ── 处理嵌套 object/dict ──────────────────
+                    # 当 type_spec 是 "object" 或 "dict"，且提供了第三个元素（嵌套 schema）时，
+                    # 递归创建嵌套的 Pydantic 模型
+                    if type_spec.lower() in ("object", "dict") and nested_schema is not None and isinstance(nested_schema, dict):
+                        nested_model = self._create_response_model(
+                            nested_schema,
+                            subject=f"{subject}_{field_name}",
+                            depth=depth + 1,
+                        )
+                        if isinstance(default, str) and default == "__required__":
+                            normalized_fields[field_name] = (nested_model, ...) # type: ignore
+                        else:
+                            normalized_fields[field_name] = (Optional[nested_model], default) if default is not None else (Optional[nested_model], None) # type: ignore
                     else:
-                        normalized_fields[field_name] = (resolved_type, default)
+                        resolved_type = self._resolve_type(type_spec)
+                        if isinstance(default, str) and default == "__required__":
+                            normalized_fields[field_name] = (resolved_type, ...)
+                        else:
+                            normalized_fields[field_name] = (resolved_type, default)
                 elif isinstance(field_type, type):
                     normalized_fields[field_name] = (field_type, None)
                 elif isinstance(field_type, str):
@@ -345,11 +388,21 @@ class DynamicRoute:
                     result = json.loads(resp.data.decode())
                 except:
                     result = resp.data.decode()
+                # ── Worker 返回的错误 → 转换为适当的 HTTP 状态码 ─────────
+                # 框架约定: worker handler 中抛出的业务异常会被 _dispatch_message
+                # 捕获并返回 {"error": "错误信息"} 格式的响应。
+                # 网关应将这类错误转换为 400 Bad Request，而非 200 OK。
+                if isinstance(result, dict) and "error" in result:
+                    raise HTTPException(status_code=400, detail=result["error"])
                 if resolved_response_model is not None:
                     return result
                 return {"result": result}
             except asyncio.TimeoutError:
                 raise HTTPException(status_code=504, detail="Service timeout")
+            except HTTPException:
+                # FastAPI 的 HTTPException 需要直接透传，不能 catch 后包裹
+                # 否则会被外层的 except Exception 捕获并变成 500
+                raise
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 

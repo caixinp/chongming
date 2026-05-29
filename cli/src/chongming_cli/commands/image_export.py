@@ -38,15 +38,26 @@ def _ensure_docker_available():
         sys.exit(1)
 
 
+def _is_rust_worker(worker_dir: str) -> bool:
+    """检测 worker 是否为 Rust 项目"""
+    return os.path.isfile(os.path.join(worker_dir, "Cargo.toml")) and \
+           os.path.isfile(os.path.join(worker_dir, "src", "main.rs"))
+
+
+def _is_python_worker(worker_dir: str) -> bool:
+    """检测 worker 是否为 Python 项目"""
+    return os.path.isfile(os.path.join(worker_dir, "main.py"))
+
+
 def _list_workers():
-    """列出所有可用的 worker 名称"""
+    """列出所有可用的 worker 名称（Python + Rust）"""
     workers = []
     if os.path.isdir(WORKERS_DIR):
         for name in sorted(os.listdir(WORKERS_DIR)):
             worker_dir = os.path.join(WORKERS_DIR, name)
-            main_py = os.path.join(worker_dir, "main.py")
-            if os.path.isdir(worker_dir) and not name.startswith(".") and os.path.isfile(main_py):
-                workers.append(name)
+            if os.path.isdir(worker_dir) and not name.startswith("."):
+                if _is_python_worker(worker_dir) or _is_rust_worker(worker_dir):
+                    workers.append(name)
     return workers
 
 
@@ -141,15 +152,25 @@ def _build_gateway_image():
     return tag
 
 
+def _get_worker_dockerfile(worker_name: str) -> str:
+    """根据 worker 类型返回对应的 Dockerfile"""
+    worker_dir = os.path.join(WORKERS_DIR, worker_name)
+    if _is_rust_worker(worker_dir):
+        return os.path.join(DOCKER_ENV_DIR, "worker-rust.Dockerfile")
+    return os.path.join(DOCKER_ENV_DIR, "worker-binary.Dockerfile")
+
+
 def _build_worker_image(worker_name: str):
-    """构建单个 Worker 的二进制镜像"""
-    dockerfile = os.path.join(DOCKER_ENV_DIR, "worker-binary.Dockerfile")
+    """构建单个 Worker 的镜像（自动检测 Python/Rust）"""
+    dockerfile = _get_worker_dockerfile(worker_name)
     if not os.path.isfile(dockerfile):
         print(f"  ⚠  跳过 {worker_name}：找不到 Dockerfile ({dockerfile})")
         return None
 
     tag = _get_image_tag(worker_name)
-    print(f"  构建 Worker [{worker_name}] 镜像: {tag} ...")
+    is_rust = _is_rust_worker(os.path.join(WORKERS_DIR, worker_name))
+    runtime = "Rust (原生编译)" if is_rust else "Python (PyInstaller)"
+    print(f"  构建 Worker [{worker_name}] 镜像: {tag} (类型: {runtime}) ...")
 
     env = os.environ.copy()
     env["DOCKER_BUILDKIT"] = "1"

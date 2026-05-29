@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "chongming 日志工具包 - 自动配置 INFO 级别日志输出到 stdout"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "minio>=7.2.0",
+]
 
 [[tool.uv.index]]
 default = true

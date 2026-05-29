@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "minio>=7.2.20",
+]
 
 [project.scripts]
 chongming = "chongming_cli:main"

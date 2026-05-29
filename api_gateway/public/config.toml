@@ -14,3 +14,9 @@ type = "pgsql"
 
 [cleanup]
 interval = 10
+
+[logging.minio]
+enabled = true
+endpoint = "minio-1:9000"
+bucket = "chongming-logs"
+retention_days = 30

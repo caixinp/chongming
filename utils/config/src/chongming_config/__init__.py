@@ -34,11 +34,20 @@ class WorkerConfig(TypedDict):
     version: str
     description: str
 
+class MinioLoggingConfig(TypedDict):
+    endpoint: str
+    bucket: str
+    retention_days: int
+    level: int
+
+class LoggingConfig(TypedDict):
+    minio: MinioLoggingConfig
+
 class Config(TypedDict):
     worker: WorkerConfig
     nats: NATSConfig
     registration: RegistrationConfig
-    cleanup: CleanupConfig  # 可选配置，用于 gateway 端
+    logging: LoggingConfig
 
 class DefaultConfig(TypedDict):
     debug: bool
@@ -51,26 +60,24 @@ class DefaultConfig(TypedDict):
 class DataBaseConfig(TypedDict):
     type: str
 
-class CleanupConfig(TypedDict):
-    interval: float
-
 class GatewayConfig(TypedDict):
     default: DefaultConfig
     nats: NATSConfig
     databse: DataBaseConfig
     cleanup: CleanupConfig
+    logging: LoggingConfig
 
 def load_config(config_path: str) -> Config:
     """从 TOML 文件加载配置"""
     with open(config_path, "rb") as f:
         config = tomli.load(f)
-    return config
+    return config # type: ignore
 
 def load_gateway_config(config_path: str) -> GatewayConfig:
     """从 TOML 文件加载配置"""
     with open(config_path, "rb") as f:
         config = tomli.load(f)
-    return config
+    return config # type: ignore
 
 if __name__ == "__main__":
     config = load_config("config.toml")

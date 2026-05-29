@@ -1,9 +1,9 @@
 # 🔒 chongming-lock — 基于 NATS JetStream KV 的分布式锁库
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![NATS](https://img.shields.io/badge/NATS-JetStream-green.svg)](https://nats.io/)
+[![NATS JetStream](https://img.shields.io/badge/NATS-JetStream-green.svg)](https://nats.io/)
 
-提供 **6 种分布式锁类型**，所有锁均基于 `chongming-cache`（NATS JetStream KV）实现，天然支持多进程 / 多实例并发。
+提供 **6 种分布式锁类型**，所有锁均基于 `chongming-cache`（NATS JetStream KV）实现，天然支持多进程 / 多实例并发、崩溃自动恢复和心跳续期。
 
 ---
 
@@ -27,6 +27,7 @@ logging.basicConfig(level=logging.INFO)
 
 async def main():
     async with ChongmingCache(logger, bucket="my_locks") as cache:
+        # 获取分布式互斥锁，超时 5 秒
         async with MutexLock(cache, "resource-a", ttl=30)(timeout=5.0):
             print("独占访问 resource-a")
 
@@ -39,12 +40,12 @@ asyncio.run(main())
 
 | 锁类型 | 类名 | 特点 | 适用场景 |
 |--------|------|------|----------|
-| **互斥锁** | `MutexLock` | 同一时刻只有一个持有者 | 资源独占访问 |
-| **读写锁** | `ReadWriteLock` | 读共享、写互斥 | 读多写少场景 |
-| **信号量** | `SemaphoreLock` | 限制最大并发数 | 连接池、限流 |
-| **可重入锁** | `ReentrantLock` | 同一实例可多次加锁 | 递归调用 |
-| **租约锁** | `LeaseLock` | 带 TTL 自动释放，适合 Leader Election | 调度选主 |
-| **栅栏令牌锁** | `FencingTokenLock` | 单调递增令牌，防止僵尸节点 | 数据一致性保护 |
+| 🥇 **互斥锁** | `MutexLock` | 同一时刻只有一个持有者 | 资源独占访问 |
+| 📖 **读写锁** | `ReadWriteLock` | 读共享、写互斥 | 读多写少场景 |
+| 🔢 **信号量** | `SemaphoreLock` | 限制最大并发数 | 连接池、限流 |
+| 🔁 **可重入锁** | `ReentrantLock` | 同一实例可多次加锁 | 递归调用 |
+| ⏱️ **租约锁** | `LeaseLock` | 带 TTL 自动释放 | Leader Election |
+| 🛡️ **栅栏令牌锁** | `FencingTokenLock` | 单调递增令牌，防僵尸节点 | 数据一致性保护 |
 
 ---
 
@@ -78,7 +79,7 @@ if await lock.acquire(blocking=False):
         await lock.release()
 ```
 
-特性：🔄 后台心跳续期 | 💀 崩溃自动过期 | 🏷️ 实例唯一 ID 追踪
+**特性：** 🔄 后台心跳续期 | 💀 崩溃自动过期 | 🏷️ 实例唯一 ID 追踪
 
 ---
 
@@ -100,7 +101,7 @@ async with rwlock.writer(timeout=5.0):
     write_to_storage(new_data)
 ```
 
-特性：📖 读并发 | ✍️ 写互斥 | 💀 过期自动抢夺
+**特性：** 📖 读并发 | ✍️ 写互斥 | 💀 过期自动抢夺
 
 ---
 
@@ -125,8 +126,7 @@ await asyncio.gather(*[query(i) for i in range(10)])
 
 ```python
 # 当前活跃持有者
-holders = await sem.get_active_holders()
-for h in holders:
+for h in await sem.get_active_holders():
     print(f"  - {h['instance_id']} (expires: {h['expires_at']})")
 
 # 当前可用额度
@@ -134,7 +134,7 @@ available = await sem.available_permits_remote()
 print(f"可用: {available}/{sem.max_count}")
 ```
 
-特性：🔢 精确限流 | 🧹 自动清理过期持有者 | 📊 可查询状态
+**特性：** 🔢 精确限流 | 🧹 自动清理过期持有者 | 📊 可查询状态
 
 ---
 
@@ -158,13 +158,13 @@ async def inner():
 await outer()
 ```
 
-特性：🔁 同一实例可重入 | 🔢 重入计数 `rlock.reentrant_count` | 💀 过期自动抢夺
+**特性：** 🔁 同一实例可重入 | 🔢 重入计数 `rlock.reentrant_count` | 💀 过期自动抢夺
 
 ---
 
 ### LeaseLock — 租约锁
 
-带 TTL 的锁，适合 Leader Election 等场景。持有者在租约期内工作，到期自动释放。
+带 TTL 的锁，持有者在租约期内工作，到期自动释放。适合 Leader Election。
 
 ```python
 from chongming_lock import LeaseLock
@@ -182,21 +182,18 @@ async with lease(timeout=5.0):
 
 ```python
 info = await lease.get_lease_info()
-if info:
-    print(f"持有者: {info['holder']}")
-    print(f"剩余时间: {info['remaining_seconds']:.1f}s")
-    print(f"续期次数: {info['renew_count']}")
-
-print(f"本地剩余: {lease.remaining_lease_time}")
+print(f"持有者: {info['holder']}")
+print(f"剩余时间: {info['remaining_seconds']:.1f}s")
+print(f"续期次数: {info['renew_count']}")
 ```
 
-特性：⏱️ 到期自动释放 | ❤️ 后台续期 | 📊 可查询状态
+**特性：** ⏱️ 到期自动释放 | ❤️ 后台续期 | 📊 可查询状态
 
 ---
 
 ### FencingTokenLock — 栅栏令牌锁
 
-**解决僵尸节点问题：** 每次获取锁生成严格单调递增的令牌，数据库记录最高令牌值，拒绝过期的写入请求。
+**解决僵尸节点问题：** 每次获取锁生成严格单调递增的令牌，数据库记录最高令牌值，拒绝过期写入。
 
 ```python
 from chongming_lock import FencingTokenLock
@@ -217,7 +214,7 @@ WHERE id = 1 AND last_fencing_token < $2;
 -- affected_rows == 0 → 拒绝
 ```
 
-特性：🔢 单调递增令牌 | 🛡️ 防止僵尸节点 | 💀 过期自动抢夺
+**特性：** 🔢 单调递增令牌 | 🛡️ 防止僵尸节点 | 💀 过期自动抢夺
 
 ---
 
@@ -259,8 +256,6 @@ async with factory.fencing_token("fenced-write", ttl=30)(timeout=5.0):
 | `renew_interval` | `float` | `10.0` | 心跳续期间隔，应 < TTL/2 |
 | `instance_id` | `str` | 自动 | 实例唯一 ID（hostname:pid:uuid） |
 
----
-
 ## 异常处理
 
 ```python
@@ -268,7 +263,7 @@ from chongming_lock import (
     LockNotAcquiredError,    # 获取锁超时或失败
     LockNotOwnedError,       # 释放不属于自己的锁
     LockReleaseError,        # 释放操作失败
-    LockStateError,          # 状态异常（如重入计数不匹配）
+    LockStateError,          # 状态异常
 )
 ```
 
@@ -280,74 +275,21 @@ from chongming_lock import (
 ┌───────────────────────────────────────┐
 │          Your Application             │
 ├───────────────────────────────────────┤
-│  chongming-lock (6 种锁类型)           │
+│  chongming-lock — 6 种锁类型           │
 ├───────────────────────────────────────┤
-│  chongming-cache (NATS JetStream KV)  │
+│  chongming-cache — NATS JetStream KV  │
 ├───────────────────────────────────────┤
-│  NATS Cluster (多节点高可用)           │
+│  NATS Cluster — 多节点高可用           │
 └───────────────────────────────────────┘
 ```
 
-### 原理
+### 工作原理
 
 1. **基于 NATS JetStream KV**：分布式 KV 存储实现锁持久化和同步
-2. **CAS 乐观锁**：`create()` / `update()` 原子操作
+2. **CAS 乐观锁**：`create()` / `update()` 原子操作保证互斥
 3. **后台心跳续期**：持有者定期续期，崩溃后自动释放
 4. **过期抢夺**：锁过期后其他实例可 CAS 抢夺
 5. **实例 ID**：全局唯一 ID 确保锁归属确认
-
-### 多进程并发安全
-
-- **跨进程互斥**：多进程共享同一 NATS KV 存储
-- **原子操作**：`create()` 和 CAS `update()` 保证原子性
-- **心跳隔离**：每个进程独立心跳，崩溃不影响其他进程
-
----
-
-## 完整示例
-
-```python
-import asyncio
-import logging
-from chongming_cache import ChongmingCache
-from chongming_lock import (
-    MutexLock, ReadWriteLock, SemaphoreLock,
-    ReentrantLock, LeaseLock, FencingTokenLock,
-    LockNotAcquiredError,
-)
-
-logger = logging.getLogger("lock-demo")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-
-async def demo():
-    async with ChongmingCache(logger, bucket="lock_demo") as cache:
-        # ── 1. MutexLock ──
-        async def worker(idx):
-            try:
-                async with MutexLock(cache, "counter", ttl=30)(timeout=5.0):
-                    logger.info("worker-%d 持有锁", idx)
-                    await asyncio.sleep(0.5)
-            except LockNotAcquiredError:
-                logger.warning("worker-%d 超时", idx)
-
-        await asyncio.gather(*(worker(i) for i in range(3)))
-
-        # ── 2. SemaphoreLock ──
-        sem = SemaphoreLock(cache, "db-pool", max_count=3, ttl=30)
-        async def query(idx):
-            async with sem(timeout=5.0):
-                logger.info("query-%d 正在查询", idx)
-                await asyncio.sleep(0.3)
-        await asyncio.gather(*(query(i) for i in range(6)))
-
-        # ── 3. FencingTokenLock ──
-        ft_lock = FencingTokenLock(cache, "fenced-write", ttl=30)
-        async with ft_lock(timeout=5.0):
-            token = ft_lock.fencing_token
-            logger.info("栅栏令牌: %d", token)
-
-asyncio.run(demo())
-```
 
 ---
 
@@ -357,7 +299,7 @@ asyncio.run(demo())
 2. **设置 timeout**：避免死等
 3. **使用 `async with`**：自动管理生命周期
 4. **Fencing 保护写操作**：重要数据使用 `FencingTokenLock`
-5. **信号量务必释放**：`async with` 自动处理
+5. **信号量使用后释放**：`async with` 自动处理
 
 ---
 
