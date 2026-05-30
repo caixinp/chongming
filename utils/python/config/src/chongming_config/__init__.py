@@ -14,6 +14,7 @@ class RegistrationItemConfig(TypedDict):
     ttl: int
     timeout: float
     response_model: Any  # 可以是 dict、list 或 None，根据实际需求定义
+    auth_required: bool   # 新增：是否需要 JWT 认证，默认 False
 
 class CleanupConfig(TypedDict):
     interval: int  # 过期路由清理检查间隔（秒），默认 10

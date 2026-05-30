@@ -29,15 +29,29 @@ logger = logging.getLogger("chongming.worker.example")
 
 
 @app.handler("order.create")
-async def create_order(input: OrderCreateInput, _app: WorkerLifespan) -> OrderCreateOutput:
+async def create_order(input: OrderCreateInput, _app: WorkerLifespan, _user: dict) -> OrderCreateOutput:
     """
-    创建订单（主动调用方）。
+    创建订单（主动调用方，带 JWT 用户认证）。
 
     演示 Worker 间通讯：
       1. ``_app.request("user.query", ...)`` → 同步调用 user.query
       2. ``_app.publish("notification.order_created", ...)`` → 异步广播
+      3. ``_user`` → 由 Gateway 通过 JWT 注入的用户身份信息
+
+    JWT 安全校验：
+      - 验证请求中的 user_id 与 JWT 中的 user_id 一致
+      - 防止客户端伪造 user_id 参数
     """
     logger.info("创建订单: user=%s, item=%s, amount=%s", input.user_id, input.item, input.amount)
+
+    # ── JWT 安全校验：验证 user_id 与 JWT 中的身份一致 ──
+    jwt_user_id = _user.get("user_id", "")
+    if jwt_user_id and jwt_user_id != input.user_id:
+        raise ValueError(
+            f"User ID mismatch: request user_id='{input.user_id}' "
+            f"does not match JWT user_id='{jwt_user_id}'"
+        )
+    logger.info("JWT 用户身份验证通过: user_id=%s, roles=%s", _user.get("user_id"), _user.get("roles"))
 
     # ── 1. request 模式：调用 user.query 获取用户信息 ────────────────
     logger.info("→ 调用 user.query...")

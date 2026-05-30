@@ -17,7 +17,8 @@ import json
 import inspect
 import logging
 import signal
-from typing import Any, Callable, Optional, Union
+from contextvars import ContextVar
+from typing import Any, Callable, Optional, Union, Dict
 from dataclasses import dataclass
 from functools import wraps
 
@@ -44,6 +45,7 @@ logger = logging.getLogger("chongming.worker")
 _RESERVED_PARAMS = {
     "_app": "app",          # WorkerLifespan 实例
     "_nc": "nc",            # NATS 连接对象
+    "_user": "user",        # 用户身份信息（由 Gateway 通过 JWT 注入）
 }
 
 
@@ -71,6 +73,13 @@ class HandlerInfo:
     params_types: dict[str, type]
     needs_app: bool = False          # 是否需要注入 WorkerLifespan 实例
     needs_nc: bool = False           # 是否需要注入 NATS 连接
+    needs_user: bool = False         # 是否需要注入用户身份信息
+    auth_required: bool = True       # 是否要求认证（默认 True 保持安全）
+
+
+
+# ContextVar: 用户身份上下文，用于在 Worker 间调用链中自动传递用户信息
+_user_context: ContextVar[Optional[Dict[str, Any]]] = ContextVar("worker_user_context", default=None)
 
 
 class WorkerLifespan:
@@ -177,6 +186,7 @@ class WorkerLifespan:
         subject: str,
         data: Any,
         timeout: float = 5.0,
+        user_info: Optional[Dict[str, Any]] = None,
     ) -> dict:
         """
         向指定 subject 发送请求并等待响应（请求-回复模式）
@@ -186,6 +196,11 @@ class WorkerLifespan:
         :param data: 请求数据（会被序列化为 JSON）
                      支持 Pydantic BaseModel 实例，自动转换为 dict
         :param timeout: 超时时间（秒），默认 5 秒
+        :param user_info: 用户身份信息（可选）。如果未指定，自动从当前
+                          调用链的上下文（_user_context）中继承。
+                          当 worker 收到来自 Gateway 的请求（已携带用户信息）
+                          时，该 worker 在处理过程中发起的 _app.request()
+                          会自动继承这个用户信息。
         :return: 响应数据（JSON dict）
         :raises ValueError: 目标 worker 返回的业务错误
         :raises asyncio.TimeoutError: 超时未收到响应
@@ -193,9 +208,22 @@ class WorkerLifespan:
         """
         if self.nc is None:
             raise RuntimeError("NATS connection is not established. Call start() first.")
+
+        # 如果未显式传递 user_info，自动从 ContextVar 继承调用链中的用户身份
+        if user_info is None:
+            user_info = _user_context.get()
+
         serialized = self._serialize_data(data)
         payload = json.dumps(serialized, default=str).encode()
-        response = await self.nc.request(subject, payload, timeout=timeout)
+
+        # 构建 NATS headers，传递用户身份信息
+        headers = {}
+        if user_info:
+            headers["x-user-id"] = user_info.get("user_id", "")
+            headers["x-user-roles"] = ",".join(user_info.get("roles", []))
+            headers = {k: v for k, v in headers.items() if v}  # 移除空值
+
+        response = await self.nc.request(subject, payload, timeout=timeout, headers=headers or None)
         result = json.loads(response.data.decode())
         logger.debug("Request to '%s': %s -> %s", subject, data, result)
         # ── 目标 worker 返回的业务错误 → 提升为异常 ─────────────┐
@@ -210,13 +238,15 @@ class WorkerLifespan:
     # ----------------------------------------------------------------
     # 内部：保留参数自动注入
     # ----------------------------------------------------------------
-    def _build_reserved_kwargs(self, handler_info: HandlerInfo) -> dict:
+    def _build_reserved_kwargs(self, handler_info: HandlerInfo, user_info: Optional[dict] = None) -> dict:
         """为 handler 构建框架自动注入的保留参数"""
         kwargs = {}
         if handler_info.needs_app:
             kwargs["_app"] = self
         if handler_info.needs_nc:
             kwargs["_nc"] = self.nc
+        if handler_info.needs_user and user_info:
+            kwargs["_user"] = user_info
         return kwargs
 
     def _validate_ttl_config(self):
@@ -290,9 +320,23 @@ class WorkerLifespan:
                 if name in annotations and annotations[name] is not inspect.Parameter.empty:
                     params_types[name] = annotations[name]
 
-            # 检查是否使用了保留参数（_app, _nc）
+            # 检查是否使用了保留参数（_app, _nc, _user）
             needs_app = "_app" in param_names
             needs_nc = "_nc" in param_names
+            needs_user = "_user" in param_names
+
+            # 从配置中查找该 subject 对应的 auth_required 值
+            auth_required = True  # 默认要求认证
+            registration = self.config.get("registration", {})
+            items = registration.get("items", [])
+            for item in items:
+                if item.get("subject") == subject:
+                    auth_required = item.get("auth_required", True)
+                    break
+            logger.debug(
+                "Handler '%s': auth_required=%s, needs_user=%s",
+                subject, auth_required, needs_user,
+            )
 
             self._handlers[subject] = HandlerInfo(
                 func=func,
@@ -301,6 +345,8 @@ class WorkerLifespan:
                 params_types=params_types,
                 needs_app=needs_app,
                 needs_nc=needs_nc,
+                needs_user=needs_user,
+                auth_required=auth_required,
             )
 
             @wraps(func)
@@ -414,6 +460,15 @@ class WorkerLifespan:
         if request_id:
             set_request_id(request_id)
 
+        # ── 提取用户身份信息（由 Gateway 通过 JWT 注入） ────
+        user_info = None
+        if msg.headers:
+            user_id = msg.headers.get("x-user-id", "")
+            roles_str = msg.headers.get("x-user-roles", "")
+            if user_id:
+                roles = roles_str.split(",") if roles_str else []
+                user_info = {"user_id": user_id, "roles": roles}
+
         handler_info = self._handlers.get(subject)
         if handler_info is None:
             logger.warning("No handler for subject: %s", subject)
@@ -423,6 +478,21 @@ class WorkerLifespan:
             except Exception:
                 pass
             return
+
+        # ── 认证检查：如果 handler 要求认证但缺少用户信息，拒绝请求 ──
+        if handler_info.auth_required and not user_info:
+            logger.warning(
+                "Authentication required for subject '%s' but no user info found in headers",
+                subject,
+            )
+            error_response = json.dumps({"error": "Authentication required"}).encode()
+            if msg.reply:
+                await msg.respond(error_response)
+            return
+
+        # ── 将用户信息存入 contextvar，使调用链中的 _app.request() 能自动继承 ──
+        if user_info:
+            _user_context.set(user_info)
 
         try:
             # 解析消息数据为 JSON dict（gateway 端以 JSON dict 格式传递参数）

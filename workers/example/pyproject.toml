@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "chongming-config",
+    "chongming-jwt",
     "chongming-logging",
     "chongming-worker",
     "nats-py>=2.14.0",
@@ -17,6 +18,7 @@ dependencies = [
 url = "https://mirrors.ustc.edu.cn/pypi/web/simple/"
 
 [tool.uv.sources]
-chongming-config = { path = "../../utils/config" }
-chongming-logging = { path = "../../utils/logging" }
-chongming-worker = { path = "../../utils/worker" }
+chongming-config = { path = "../../utils/python/config" }
+chongming-jwt = { path = "../../utils/python/jwt" }
+chongming-logging = { path = "../../utils/python/logging" }
+chongming-worker = { path = "../../utils/python/worker" }

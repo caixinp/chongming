@@ -2,6 +2,7 @@ import logging
 import uuid
 from .nats_client import get_nats_client
 from fastapi import Request, HTTPException, FastAPI
+from fastapi.responses import JSONResponse
 import json
 import asyncio
 from typing import List, Optional, Dict, Any, Type, Union, Tuple
@@ -291,6 +292,7 @@ class DynamicRoute:
         tags: Optional[List[str]] = None,
         timeout: float = 2.0,
         response_model: Optional[Union[Dict[str, Any], Type[BaseModel], List[str]]] = None,
+        auth_required: bool = False,
     ):
         """添加动态路由。
         
@@ -306,6 +308,9 @@ class DynamicRoute:
         
         支持的参数类型: str, int, float, bool
         类型校验失败时返回 HTTP 400 错误，不会转发给 Worker。
+
+        'auth_required': 如果为 True，则强制进行 JWT 认证；
+        白名单路径（如 /health）和未启用 JWT 时自动跳过。
         """
         # ── 解析参数类型声明 ──────────────────────────────
         param_names, param_types = self._parse_params(params)
@@ -341,6 +346,24 @@ class DynamicRoute:
             request_id = str(uuid.uuid4())
             set_request_id(request_id)
 
+            # ── JWT 认证 ──────────────────────────────────────
+            user_info = None
+            jwt_auth = getattr(request.app.state, "jwt_auth", None)
+            if jwt_auth is not None and jwt_auth.enabled:
+                if jwt_auth.is_whitelisted(request.url.path):
+                    # 白名单路径，跳过认证
+                    pass
+                elif auth_required:
+                    auth_header = request.headers.get("Authorization")
+                    if not auth_header or not auth_header.startswith("Bearer "):
+                        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+                    token = auth_header.split(" ")[1]
+                    payload = jwt_auth.decode_token(token)
+                    if not payload:
+                        raise HTTPException(status_code=401, detail="Invalid or expired token")
+                    user_info = jwt_auth.get_user_info(payload)
+                    request.state.user = user_info
+
             data = dict(request.query_params)
             if request.method in ("POST", "PUT"):
                 try:
@@ -373,10 +396,15 @@ class DynamicRoute:
 
             try:
                 nc = await get_nats_client()
+                # 构建 NATS headers，包含用户信息
+                nats_headers = {"request_id": request_id}
+                if user_info:
+                    nats_headers["x-user-id"] = user_info["user_id"]
+                    nats_headers["x-user-roles"] = ",".join(user_info["roles"])
                 resp = await nc.request(
                     subject, payload,
                     timeout=timeout,
-                    headers={"request_id": request_id},
+                    headers=nats_headers,
                 )
                 worker_request_id = resp.headers.get("request_id", "") if resp.headers else ""
                 if worker_request_id and worker_request_id != request_id:
@@ -431,6 +459,10 @@ class DynamicRoute:
                 "description": f"Parameter '{p}' (type: {type_name}) for {subject}",
             })
         openapi_extra = {"parameters": openapi_params}
+
+        # 如果 auth_required=True，在 OpenAPI 中标记该端点需要 JWT 认证
+        if auth_required:
+            openapi_extra["security"] = [{"JWT": []}]
 
         async with self._route_lock:
             # 构造完整路径

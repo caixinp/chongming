@@ -10,7 +10,6 @@ resolution-markers = [
 members = [
     "chongming",
     "chongming-cli",
-    "chongming-worker",
 ]
 
 [[package]]
@@ -153,14 +152,14 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chongming-worker", editable = "utils/worker" },
+    { name = "chongming-worker", directory = "utils/python/worker" },
     { name = "minio", specifier = ">=7.2.20" },
 ]
 
 [[package]]
 name = "chongming-config"
 version = "0.1.0"
-source = { directory = "utils/config" }
+source = { directory = "utils/python/config" }
 dependencies = [
     { name = "tomli" },
 ]
@@ -171,7 +170,7 @@ requires-dist = [{ name = "tomli" }]
 [[package]]
 name = "chongming-logging"
 version = "0.1.0"
-source = { directory = "utils/logging" }
+source = { directory = "utils/python/logging" }
 dependencies = [
     { name = "minio" },
 ]
@@ -182,7 +181,7 @@ requires-dist = [{ name = "minio", specifier = ">=7.2.0" }]
 [[package]]
 name = "chongming-worker"
 version = "0.1.0"
-source = { editable = "utils/worker" }
+source = { directory = "utils/python/worker" }
 dependencies = [
     { name = "chongming-config" },
     { name = "chongming-logging" },
@@ -192,8 +191,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chongming-config", directory = "utils/config" },
-    { name = "chongming-logging", directory = "utils/logging" },
+    { name = "chongming-config", directory = "utils/python/config" },
+    { name = "chongming-logging", directory = "utils/python/logging" },
     { name = "nats-py" },
     { name = "pydantic", specifier = ">=2.13.4" },
 ]

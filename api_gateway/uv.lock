@@ -158,7 +158,7 @@ wheels = [
 [[package]]
 name = "chongming-cache"
 version = "0.1.0"
-source = { directory = "../utils/cache" }
+source = { directory = "../utils/python/cache" }
 dependencies = [
     { name = "chongming-config" },
     { name = "nats-py" },
@@ -166,14 +166,14 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chongming-config", directory = "../utils/config" },
+    { name = "chongming-config", directory = "../utils/python/config" },
     { name = "nats-py", specifier = ">=2.14.0" },
 ]
 
 [[package]]
 name = "chongming-config"
 version = "0.1.0"
-source = { directory = "../utils/config" }
+source = { directory = "../utils/python/config" }
 dependencies = [
     { name = "tomli" },
 ]
@@ -188,12 +188,15 @@ source = { editable = "." }
 dependencies = [
     { name = "chongming-cache" },
     { name = "chongming-config" },
+    { name = "chongming-jwt" },
     { name = "chongming-lock" },
     { name = "chongming-logging" },
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "gunicorn" },
     { name = "module-bank" },
     { name = "nats-py" },
+    { name = "pyjwt" },
     { name = "tomli" },
     { name = "typing-extensions" },
     { name = "uvicorn" },
@@ -210,14 +213,17 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chongming-cache", directory = "../utils/cache" },
-    { name = "chongming-config", directory = "../utils/config" },
-    { name = "chongming-lock", directory = "../utils/lock" },
-    { name = "chongming-logging", directory = "../utils/logging" },
+    { name = "chongming-cache", directory = "../utils/python/cache" },
+    { name = "chongming-config", directory = "../utils/python/config" },
+    { name = "chongming-jwt", directory = "../utils/python/jwt" },
+    { name = "chongming-lock", directory = "../utils/python/lock" },
+    { name = "chongming-logging", directory = "../utils/python/logging" },
+    { name = "cryptography" },
     { name = "fastapi", extras = ["uvicorn"] },
     { name = "gunicorn" },
     { name = "module-bank" },
     { name = "nats-py" },
+    { name = "pyjwt" },
     { name = "tomli" },
     { name = "typing-extensions" },
     { name = "uvicorn" },
@@ -233,9 +239,24 @@ dev = [
 ]
 
 [[package]]
+name = "chongming-jwt"
+version = "0.1.0"
+source = { directory = "../utils/python/jwt" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "pyjwt" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cryptography" },
+    { name = "pyjwt" },
+]
+
+[[package]]
 name = "chongming-lock"
 version = "0.1.0"
-source = { directory = "../utils/lock" }
+source = { directory = "../utils/python/lock" }
 dependencies = [
     { name = "chongming-cache" },
     { name = "chongming-config" },
@@ -244,15 +265,15 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chongming-cache", directory = "../utils/cache" },
-    { name = "chongming-config", directory = "../utils/config" },
+    { name = "chongming-cache", directory = "../utils/python/cache" },
+    { name = "chongming-config", directory = "../utils/python/config" },
     { name = "nats-py", specifier = ">=2.14.0" },
 ]
 
 [[package]]
 name = "chongming-logging"
 version = "0.1.0"
-source = { directory = "../utils/logging" }
+source = { directory = "../utils/python/logging" }
 dependencies = [
     { name = "minio" },
 ]
@@ -702,6 +723,15 @@ dependencies = [
 sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/1a/67/f4452d68793fb15beba4f19ef39a38a8822f0da7452b503c400d5a21f5c1/pyinstaller_hooks_contrib-2026.5.tar.gz", hash = "sha256:f066dfca8f7c45ff6336c9cf9fe25b4e48bfeb322a1aa24faaedfb8a8d1b0b08", size = 173689, upload-time = "2026-05-04T22:36:55.124Z" }
 wheels = [
     { url = "https://mirrors.ustc.edu.cn/pypi/packages/f6/5c/fd465d11da4d12b50d7eb5d2ee2ceb780d8d049dbb489f3828d131e387af/pyinstaller_hooks_contrib-2026.5-py3-none-any.whl", hash = "sha256:ea1535783fbdac4626351709e83f3ea80b681d3a4745763ebb407b5e27342eb9", size = 457314, upload-time = "2026-05-04T22:36:53.598Z" },
+]
+
+[[package]]
+name = "pyjwt"
+version = "2.13.0"
+source = { registry = "https://mirrors.ustc.edu.cn/pypi/web/simple/" }
+sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
+wheels = [
+    { url = "https://mirrors.ustc.edu.cn/pypi/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", hash = "sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728", size = 31274, upload-time = "2026-05-21T19:54:35.362Z" },
 ]
 
 [[package]]

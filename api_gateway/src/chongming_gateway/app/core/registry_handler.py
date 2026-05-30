@@ -130,6 +130,8 @@ class RegistryHandler:
             response_model = item.get("response_model", None)
             is_internal = item.get("internal", False)
 
+            auth_required = item.get("auth_required", False)
+
             if not is_internal:
                 try:
                     await self._dynamic_route_manager.add_dynamic_route(
@@ -143,6 +145,7 @@ class RegistryHandler:
                         tags=tags,
                         timeout=timeout,
                         response_model=response_model,
+                        auth_required=auth_required,
                     )
                 except Exception as e:
                     logger.error(
@@ -166,6 +169,7 @@ class RegistryHandler:
                 "router_prefix": router_prefix or _infer_prefix_from_path(path),
                 "tags": tags or [router_prefix.strip("/")] if router_prefix else None,
                 "internal": is_internal,
+                "auth_required": auth_required,
             }
 
         # 提交注册结果
@@ -276,6 +280,7 @@ class RegistryHandler:
                 response_model = item.get("response_model", None)
                 prefix = router_prefix or _infer_prefix_from_path(path) # type: ignore
                 is_internal = item.get("internal", False)
+                auth_required = item.get("auth_required", False)
 
                 if not is_internal:
                     await self._dynamic_route_manager.add_dynamic_route(
@@ -289,6 +294,7 @@ class RegistryHandler:
                         tags=tags,
                         timeout=timeout,
                         response_model=response_model,
+                        auth_required=auth_required,
                     )
                 else:
                     logger.info(
@@ -305,6 +311,7 @@ class RegistryHandler:
                     "router_prefix": prefix,
                     "tags": tags or [prefix.strip("/")] if prefix else None,
                     "internal": is_internal,
+                    "auth_required": auth_required,
                 }
                 logger.info(
                     "Auto-registered route for %s via batch heartbeat "

@@ -16,6 +16,7 @@ NATS 消息订阅和后台过期清理任务等。
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import nats
 import asyncio
 import json
@@ -26,6 +27,7 @@ from .core.dynamic_route import DynamicRoute
 from .core.route_store import RouteKVStore
 from .core.route_registry import RouteRegistry
 from .core.registry_handler import RegistryHandler
+from chongming_jwt import JWTAuth
 from chongming_config import load_gateway_config
 from chongming_cache import ChongmingCache
 from chongming_lock import LockFactory
@@ -96,7 +98,19 @@ async def lifespan(app: FastAPI):
     # ── 1. MinIO 日志持久化 ──────────────────────────────
     _setup_minio_logging()
 
-    # ── 2. NATS 连接 ─────────────────────────────────────
+    # ── 2. JWT 认证初始化 ────────────────────────────────
+    jwt_config = gateway_config.get("jwt", {})
+    jwt_auth = JWTAuth(jwt_config)
+    app.state.jwt_auth = jwt_auth
+    if jwt_auth.enabled:
+        logger.info(
+            "JWT auth initialized (algorithm=%s, issuer=%s, audience=%s)",
+            jwt_auth.algorithm, jwt_auth.issuer, jwt_auth.audience,
+        )
+    else:
+        logger.info("JWT auth is disabled")
+
+    # ── 3. NATS 连接 ─────────────────────────────────────
     nc = await get_nats_client()
     logger.info("FastAPI gateway connected to NATS cluster")
 
@@ -188,13 +202,50 @@ async def lifespan(app: FastAPI):
 # ── FastAPI 应用实例 ──────────────────────────────────────
 prefix = gateway_config["default"]["prefix"]
 name = gateway_config["default"]["name"]
+
+# OpenAPI Bearer token 安全方案（使 /docs 显示 Authorize 按钮）
+security_scheme = HTTPBearer(
+    scheme_name="JWT",
+    description="Enter your JWT token (Bearer <token>)",
+    auto_error=False,
+)
+
 app = FastAPI(
     lifespan=lifespan,
     root_path=prefix,
     title=f"{name} API Gateway",
     description="Dynamic API Gateway powered by FastAPI and NATS",
     version="1.0.0",
+    swagger_ui_parameters={
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+    },
 )
+
+
+# ── 注册 OpenAPI 全局安全方案（使 /docs 显示 Authorize 按钮） ─
+def custom_openapi():
+    """自定义 OpenAPI schema，注入 JWT Bearer 安全方案"""
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = app._original_openapi()
+    # 注入 securitySchemes 组件
+    openapi_schema.setdefault("components", {}).setdefault("securitySchemes", {})
+    openapi_schema["components"]["securitySchemes"]["JWT"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Enter your JWT token (Bearer <token>)",
+    }
+    # 全局安全要求（仅标记，不强制 /health 等端点，由 jwt_auth 的白名单控制）
+    openapi_schema.setdefault("security", [{"JWT": []}])
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+# 保存原始 openapi 方法并替换
+app._original_openapi = app.openapi
+app.openapi = custom_openapi
 
 
 # ── 健康检查端点 ──────────────────────────────────────────

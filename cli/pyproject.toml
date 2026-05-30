@@ -16,8 +16,8 @@ dependencies = [
 [project.scripts]
 chongming = "chongming_cli:main"
 
+[tool.uv.sources]
+chongming-worker = { path = "../utils/python/worker" }
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/chongming_cli"]
-
-[tool.uv.sources]
-chongming-worker = { workspace = true }

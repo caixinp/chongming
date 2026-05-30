@@ -20,3 +20,18 @@ enabled = true
 endpoint = "localhost:9000"
 bucket = "chongming-logs"
 retention_days = 30
+
+[jwt]
+enabled = true
+algorithm = "HS256"
+secret_key = "your-256-bit-secret-here-change-in-production"
+issuer = "chongming"
+audience = "chongming-api"
+user_id_claim = "sub"
+roles_claim = "roles"
+whitelist_paths = [
+    "/health",
+    "/docs",
+    "/openapi.json",
+    "/api/v1/auth/login"
+]
