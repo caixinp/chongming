@@ -43,24 +43,38 @@ Worker 是 Chongming 微服务架构中的**业务逻辑执行单元**。每个 
 └──────────────┘           JSON              └──────────────────┘
 ```
 
-### Worker 的职责
+### Worker 的核心 — `config.toml`
 
-| 职责 | 说明 |
-|------|------|
-| **注册路由** | 启动时通过 NATS 向 Gateway 上报自己的 handler 列表 |
-| **处理请求** | 监听 NATS subject，收到请求后调用对应的业务函数 |
-| **发送心跳** | 定期发送心跳，告知 Gateway 自己仍存活 |
-| **优雅关闭** | 收到终止信号时，先注销路由再关闭连接 |
-| **服务间通信** | 通过 `_app.request()` 同步调用或 `_app.publish()` 异步广播 |
+**每个 Worker 的核心是 `config.toml` 文件**，它是 Worker 的**唯一配置来源**，定义了 Worker 的全部行为：
 
-### Worker 生命周期
+| 配置模块 | 作用 | 说明 |
+|----------|------|------|
+| `[worker]` | Worker 身份 | 名称、版本、描述 |
+| `[nats]` | 连接信息 | NATS 集群地址列表 |
+| `[registration]` | 路由注册 | 服务名、队列组、心跳间隔、**所有路由定义（items）** |
+| `[logging.minio]` | 日志持久化 | MinIO 对象存储配置 |
+
+Worker 的生命周期就是围绕 `config.toml` 展开的：
+
+```
+config.toml 加载 ──→ 连接 NATS ──→ 注册路由 ──→ 处理请求 ──→ 优雅关闭
+     │                    │              │             │             │
+     │                    ▼              ▼             ▼             ▼
+  读取 Worker        读取 NATS      读取 items      按 params      触发
+  身份信息           URL 列表       注册所有        解析参数        注销
+                   (支持多节点)     handler         调用 handler    路由
+```
+
+---
+
+## Worker 生命周期
 
 ```
 启动
   │
   ▼
 ┌─────────────────────┐
-│  加载 config.toml    │  ← Worker 名称、NATS 地址、路由配置
+│  ★ 加载 config.toml  │  ← Worker 名称、NATS 地址、路由配置（items）
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
@@ -68,7 +82,7 @@ Worker 是 Chongming 微服务架构中的**业务逻辑执行单元**。每个 
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
-│  注册服务到 Gateway   │  ← 发送注册消息到 service.registry
+│  注册服务到 Gateway   │  ← 读取 config.toml items 逐条注册
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
@@ -104,7 +118,7 @@ chongming new my-worker
 chongming new my-worker --lang rust
 ```
 
-这会自动生成完整的项目结构，包括 `config.toml`、`main.py`、handler 目录等。
+这会自动生成完整的项目结构，包含 `config.toml`、`main.py`、handler 目录等。**生成后的第一件事就是编辑 `config.toml`**。
 
 ### 方式二：手动搭建
 
@@ -113,24 +127,55 @@ chongming new my-worker --lang rust
 mkdir -p workers/my-worker/app/handlers
 cd workers/my-worker
 
-# 2. 创建 main.py
+# 2. 创建 config.toml（Worker 的核心！）
+cat > config.toml << 'TOML'
+[worker]
+name = "my-worker"
+version = "0.1.0"
+description = "my first worker"
+
+[nats]
+urls = ["nats://localhost:4222"]
+
+[registration]
+type = "register"
+service = "my-worker"
+queue_group = "my-workers"
+heartbeat_interval = 15
+
+items = [
+    {
+        subject = "hello.world",
+        method = "GET",
+        path = "/hello",
+        params = ["name: str"],
+        ttl = 30,
+        timeout = 2.0,
+        response_model = {
+            message = ["str", "__required__"]
+        }
+    }
+]
+TOML
+
+# 3. 创建 main.py
 cat > main.py << 'EOF'
 from app.bootstrap import app
 app.run()
 EOF
 
-# 3. 创建 bootstrap.py
+# 4. 创建 bootstrap.py
 mkdir -p app
 cat > app/bootstrap.py << 'EOF'
 from chongming_worker.worker_lifespan import WorkerLifespan
-app = WorkerLifespan("config.toml")
+app = WorkerLifespan("config.toml")  # ← 加载 config.toml
 EOF
 
-# 4. 创建 handler
+# 5. 创建 handler
 cat > app/handlers/hello.py << 'EOF'
 from app.bootstrap import app
 
-@app.handler("hello.world")
+@app.handler("hello.world")  # ← 匹配 config.toml 中的 subject
 async def hello(name: str) -> dict:
     return {"message": f"Hello, {name}!"}
 EOF
@@ -139,10 +184,6 @@ cat > app/handlers/__init__.py << 'EOF'
 from app.handlers import hello  # noqa: F401
 EOF
 ```
-
-### Worker 核心配置（config.toml）
-
-每个 Worker 的核心是 `config.toml`，它定义了 Worker 的身份、连接信息和所有 handler 的路由。详细说明见 [CLI README](cli/README.md#worker-configtoml-配置详解)。
 
 ---
 
@@ -193,7 +234,11 @@ chongming/
 │   └── src/chongming_cli/
 ├── workers/                # ★ Worker 服务实例（你的业务代码放这里）
 │   ├── example/            #   Python Worker 完整示例（建议从这开始）
+│   │   ├── config.toml     #     ← Worker 的"心脏"，所有配置在此
+│   │   └── ...
 │   └── example_rs/         #   Rust Worker 示例
+│       ├── config.toml     #     ← 也是 config.toml！
+│       └── ...
 ├── templates/              # ★ Worker 脚手架模板
 │   ├── python/             #   Python Worker 模板
 │   └── rust/               #   Rust Worker 模板
@@ -247,6 +292,8 @@ uv sync
 python main.py
 ```
 
+Worker 启动后会自动**读取 `config.toml`** → 连接 NATS → 向 Gateway 注册路由。**所有行为均由 `config.toml` 驱动**。
+
 ### 第 4 步：验证完整链路
 
 ```bash
@@ -272,9 +319,9 @@ open http://localhost:8000/docs
 
 | 文档 | 适合读者 | 内容 |
 |------|----------|------|
-| **[Worker 框架 (Python)](utils/worker/README.md)** | **所有开发者（从这里开始）** | Worker 生命周期、handler 开发、服务间通信 |
-| **[Worker 示例](workers/example/README.md)** | **初学者** | 完整功能演示，覆盖全部特性 |
-| **[CLI 工具](cli/README.md)** | 所有开发者 | 脚手架创建、模型生成、构建部署 |
+| **[Worker 框架 (Python)](utils/python/worker/README.md)** | **所有开发者（从这里开始）** | Worker 生命周期、handler 开发、服务间通信、**config.toml 各字段详解** |
+| **[Worker 示例](workers/example/README.md)** | **初学者** | **基于 config.toml 的完整功能演示**，覆盖全部特性 |
+| **[CLI 工具](cli/README.md)** | 所有开发者 | 脚手架创建、模型生成、构建部署、**config.toml 完整参考** |
 | **[API Gateway](api_gateway/README.md)** | 后端开发者 | 网关配置、部署、API 参考 |
 | **[Docker 部署](docker-env/README.md)** | DevOps | 基础设施部署、生产环境配置 |
 | **[Worker 框架 (Rust)](utils/rust/worker/README.md)** | Rust 开发者 | Rust Worker 开发指南 |
@@ -285,8 +332,8 @@ open http://localhost:8000/docs
 
 ### 按角色推荐阅读顺序
 
-- **👤 新手入门** → `utils/worker/README.md` → `workers/example/README.md` → `cli/README.md`
-- **🔧 开发 Worker** → `utils/worker/README.md` → `workers/example/README.md`
+- **👤 新手入门** → `utils/python/worker/README.md` → `workers/example/README.md` → `cli/README.md`
+- **🔧 开发 Worker** → 先看 `config.toml` → `utils/python/worker/README.md` → `workers/example/README.md`
 - **🚀 生产部署** → `cli/README.md` → `docker-env/README.md`
 
 ---
@@ -308,38 +355,14 @@ open http://localhost:8000/docs
                           └─────────────────┘
 ```
 
-1. **客户端** → 发送 HTTP 请求到 **API Gateway**
-2. **API Gateway** → 查找匹配的 Worker → 通过 NATS Request-Reply 转发
-3. **Worker** → 接收消息 → 提取 request_id（分布式追踪）→ 解析参数 → 调用业务 handler
-4. **Worker** → 返回结果 → Gateway 响应客户端
-5. **Swagger UI** → `http://localhost:8000/docs` 自动展示所有动态路由
+**关键链路：config.toml → Gateway 路由注册 → 请求分发**
 
-### Worker 内部消息分发流程
-
-```
-NATS 消息到达
-      │
-      ▼
-┌─────────────────────┐
-│  提取 request_id     │  ← 用于分布式追踪
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│  解析参数（JSON）     │
-│  ├─ dict → 按参数名映射并按类型注解转换
-│  └─ 非 dict → 作为唯一参数传入
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│  调用业务 handler    │  ← 你的业务代码
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│  序列化为 JSON       │
-│  通过 msg.respond()  │
-│  回传结果给 Gateway  │
-└─────────────────────┘
-```
+1. **Worker 启动** → 读取 `config.toml` → 通过 `service.registry` 向 Gateway 注册 routes
+2. **客户端** → 发送 HTTP 请求到 **API Gateway**
+3. **API Gateway** → 查找匹配的 Worker → 通过 NATS Request-Reply 转发
+4. **Worker** → 接收消息 → 提取 request_id（分布式追踪）→ 解析参数 → 调用业务 handler
+5. **Worker** → 返回结果 → Gateway 响应客户端
+6. **Swagger UI** → `http://localhost:8000/docs` 自动展示所有动态路由
 
 ---
 
@@ -351,7 +374,7 @@ NATS 消息到达
 | **API 网关** | FastAPI + Uvicorn/Gunicorn | HTTP 路由、OpenAPI 文档 |
 | **Worker (Python)** | asyncio + NATS-Py | 业务逻辑处理 |
 | **Worker (Rust)** | tokio + async-nats | 高性能业务处理 |
-| **配置管理** | TOML | config.toml 统一配置格式 |
+| **配置管理** | **TOML** | **`config.toml` 统一配置格式，Worker 的唯一配置来源** |
 | **容器编排** | Docker Compose | 基础设施部署 |
 | **前端** | Vue 3 + Vite + TypeScript | 管理面板 |
 | **构建工具** | PyInstaller / Cargo | 二进制编译 |
@@ -397,7 +420,6 @@ curl http://localhost:8080/health
 - 不包含源码，保护知识产权
 
 ---
-
 ## 🤝 贡献指南
 
 1. Fork 本仓库

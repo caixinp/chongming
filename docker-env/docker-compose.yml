@@ -61,7 +61,7 @@ services:
       - POSTGRESQL_POSTGRES_PASSWORD=admin123
       - POSTGRESQL_USERNAME=myuser
       - POSTGRESQL_PASSWORD=mypassword
-      - POSTGRESQL_DATABASE=mydb
+      # - POSTGRESQL_DATABASE=mydb
       - REPMGR_PASSWORD=repmgrpass
       - REPMGR_PRIMARY_HOST=pg-master
       - REPMGR_PRIMARY_PORT=5432
@@ -93,7 +93,7 @@ services:
       - POSTGRESQL_POSTGRES_PASSWORD=admin123
       - POSTGRESQL_USERNAME=myuser
       - POSTGRESQL_PASSWORD=mypassword
-      - POSTGRESQL_DATABASE=mydb
+      # - POSTGRESQL_DATABASE=mydb
       - REPMGR_PASSWORD=repmgrpass
       - REPMGR_PRIMARY_HOST=pg-master
       - REPMGR_PRIMARY_PORT=5432

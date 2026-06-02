@@ -1,0 +1,26 @@
+[project]
+name = "user_auth"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chongming-database",
+    "chongming-jwt",
+    "chongming-worker",
+    "chongming-permission",
+    "argon2-cffi",
+    "chongming-config",
+]
+
+[[tool.uv.index]]
+url = "https://mirrors.ustc.edu.cn/pypi/web/simple/"
+
+[tool.uv.sources]
+chongming-logging = { path = "../../utils/python/logging" }
+chongming-jwt = { path = "../../utils/python/jwt" }
+chongming-cache = { path = "../../utils/python/cache" }
+chongming-database = { path = "../../utils/python/database" }
+chongming-permission = { path = "../../utils/python/permission" }
+chongming-config = { path = "../../utils/python/config" }
+chongming-worker = { path = "../../utils/python/worker" }

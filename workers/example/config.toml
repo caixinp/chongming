@@ -1,7 +1,8 @@
 [worker]
 name = "example"
 version = "0.1.0"
-description = "chongming worker example — covers all WorkerLifespan features"
+description = "chongming worker example — demonstrates new config features"
+config_version = "2.0"          # ← 新增：配置版本号
 
 [nats]
 urls = [
@@ -13,89 +14,85 @@ urls = [
 [registration]
 type = "register"
 service = "example"
-queue_group = "calc-workers"  # Queue Group 名称，同 group 的 worker 实现负载均衡
+queue_group = "calc-workers"    # Queue Group 名称，同 group 的 worker 实现负载均衡
 router_prefix = "/calc"
 tags = ["example"]
-heartbeat_interval = 15  # 心跳间隔（秒），TTL 必须大于此值
+heartbeat_interval = 15         # 心跳间隔（秒），TTL 必须大于此值
+config_version = "2.0"          # ← 新增：也可以在 registration 级别声明
+
+# ── defaults 默认值继承 ───────────────────────────────────────────
+# 未在 items 中显式指定的字段，会从 defaults 继承。
+# 这样对于一组相似路由（如 CRUD），无需重复写相同的字段。
+defaults = { method = "GET", ttl = 30, timeout = 2.0, auth_required = true }
+
 items = [
     # ── 基础运算（纯业务逻辑） ────────────────────────────────────
+    # 使用新语法演示：method、ttl、timeout、auth_required 继承自 defaults
     {
         subject = "calc.add",
-        method = "GET",
         path = "/add",
         shared = true,
         summary = "Add two numbers",
         docstring = "Add two numbers and return result with metadata",
+        # 扩展参数类型：支持 list[str] 等泛型
         params = ["a: float", "b: float"],
-        ttl = 30,
-        timeout = 2.0,
+        # 新语法 response_model: { field = { type, required, default } }
         response_model = {
-            result = ["float", "__required__"],
-            operation = ["str", "add"],
-            timestamp = ["float", 0.0]
+            result = { type = "float", required = true },
+            operation = { type = "str", default = "add" },
+            timestamp = { type = "float", default = 0.0 }
         }
     },
     {
         subject = "calc.subtract",
-        method = "GET",
         path = "/subtract",
         summary = "Subtract two numbers",
         docstring = "Subtract b from a and return result with metadata",
         params = ["a: float", "b: float"],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            result = ["float", "__required__"],
-            operation = ["str", "subtract"],
-            timestamp = ["float", 0.0]
+            result = { type = "float", required = true },
+            operation = { type = "str", default = "subtract" },
+            timestamp = { type = "float", default = 0.0 }
         }
     },
     {
         subject = "calc.multiply",
-        method = "GET",
         path = "/multiply",
         summary = "Multiply two numbers",
         docstring = "Multiply two numbers and return result with metadata",
         params = ["a: float", "b: float"],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            result = ["float", "__required__"],
-            operation = ["str", "multiply"],
-            timestamp = ["float", 0.0]
+            result = { type = "float", required = true },
+            operation = { type = "str", default = "multiply" },
+            timestamp = { type = "float", default = 0.0 }
         }
     },
     {
         subject = "calc.divide",
-        method = "GET",
         path = "/divide",
         summary = "Divide two numbers",
         docstring = "Divide a by b and return result with metadata",
         params = ["a: float", "b: float"],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            result = ["float", "__required__"],
-            operation = ["str", "divide"],
-            timestamp = ["float", 0.0]
+            result = { type = "float", required = true },
+            operation = { type = "str", default = "divide" },
+            timestamp = { type = "float", default = 0.0 }
         }
     },
     # ── Worker 间通讯：被动服务（被 _app.request() 调用） ──────────
     {
         subject = "user.query",
-        method = "GET",
+        method = "POST",
         path = "/user/query",
         summary = "Query user info (worker-to-worker: passive responder)",
         docstring = "Query user information by user_id. Used by order.create via _app.request()",
         params = ["user_id: str"],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            user_id = ["str", "__required__"],
-            name = ["str", "__required__"],
-            balance = ["float", 0.0],
-            level = ["str", "normal"],
-            queried_at = ["float", 0.0]
+            user_id = { type = "str", required = true },
+            name = { type = "str", required = true },
+            balance = { type = "float", default = 0.0 },
+            level = { type = "str", default = "normal" },
+            queried_at = { type = "float", default = 0.0 }
         }
     },
     # ── Worker 间通讯：主动调用方（_app.request + _app.publish） ──
@@ -103,25 +100,24 @@ items = [
         subject = "order.create",
         method = "POST",
         path = "/order/create",
-        auth_required = true,
+        timeout = 10.0,         # 覆盖 defaults 的 timeout
         summary = "Create order (demonstrates _app.request & _app.publish)",
         docstring = "Create order. Internally calls user.query (request mode) and notification.order_created (pub/sub mode). Demonstrates _app injection for worker-to-worker communication.",
         params = ["user_id: str", "amount: float", "item: str"],
-        ttl = 30,
-        timeout = 10.0,
+        # 新语法嵌套对象：使用 fields 表示嵌套结构
         response_model = {
-            order_id = ["str", "__required__"],
-            user = ["object", "__required__", {
-                user_id = ["str", "__required__"],
-                name = ["str", "__required__"],
-                balance = ["float", 0.0],
-                level = ["str", "normal"],
-                queried_at = ["float", 0.0]
-            }],
-            item = ["str", "__required__"],
-            amount = ["float", "__required__"],
-            status = ["str", "created"],
-            timestamp = ["float", 0.0]
+            order_id = { type = "str", required = true },
+            user = { type = "object", required = true, fields = {
+                user_id = { type = "str", required = true },
+                name = { type = "str", required = true },
+                balance = { type = "float", default = 0.0 },
+                level = { type = "str", default = "normal" },
+                queried_at = { type = "float", default = 0.0 }
+            }},
+            item = { type = "str", required = true },
+            amount = { type = "float", required = true },
+            status = { type = "str", default = "created" },
+            timestamp = { type = "float", default = 0.0 }
         }
     },
     # ── Worker 间通讯：异步通知接收方（通过 publish() 触发） ──────
@@ -129,16 +125,15 @@ items = [
         subject = "notification.order_created",
         method = "POST",
         path = "/notification/order_created",
+        auth_required = false,  # 覆盖 defaults 的 auth_required
         summary = "Order created notification (pub/sub pattern)",
         docstring = "Process order creation notification. Fanned out via _app.publish() and runs independently.",
         params = ["order_id: str", "user_id: str", "user_name: str", "item: str", "amount: float", "timestamp: float"],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            status = ["str", "notified"],
-            message = ["str", "__required__"],
-            order_id = ["str", "__required__"],
-            notified_at = ["float", 0.0]
+            status = { type = "str", default = "notified" },
+            message = { type = "str", required = true },
+            order_id = { type = "str", required = true },
+            notified_at = { type = "float", default = 0.0 }
         },
         internal = true
     },
@@ -151,12 +146,10 @@ items = [
         summary = "Health check via _nc (raw NATS connection injection)",
         docstring = "Health check that uses _nc (raw NATS connection) injected by the framework",
         params = [],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            status = ["str", "__required__"],
-            nats_server = ["str", "__required__"],
-            timestamp = ["float", 0.0]
+            status = { type = "str", required = true },
+            nats_server = { type = "str", required = true },
+            timestamp = { type = "float", default = 0.0 }
         },
         internal = true
     },
@@ -165,18 +158,17 @@ items = [
         subject = "system.info",
         method = "GET",
         path = "/system/info",
+        auth_required = false,
         summary = "System info via _app.nats_connection (WorkerLifespan injection)",
         docstring = "Returns system info by accessing _app.nats_connection property",
         params = [],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            status = ["str", "__required__"],
-            nats_server = ["str", "__required__"],
-            worker_name = ["str", "__required__"],
-            registered_subjects = ["list", []],
-            heartbeat_interval = ["float", 15.0],
-            timestamp = ["float", 0.0]
+            status = { type = "str", required = true },
+            nats_server = { type = "str", required = true },
+            worker_name = { type = "str", required = true },
+            registered_subjects = { type = "list", default = [] },
+            heartbeat_interval = { type = "float", default = 15.0 },
+            timestamp = { type = "float", default = 0.0 }
         },
         internal = true
     }

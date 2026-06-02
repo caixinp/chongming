@@ -32,8 +32,8 @@ url = "https://mirrors.ustc.edu.cn/pypi/web/simple/"
 chongming-cache = { path = "../utils/python/cache" }
 chongming-lock = { path = "../utils/python/lock" }
 chongming-logging = { path = "../utils/python/logging" }
-chongming-config = { path = "../utils/python/config" }
 chongming-jwt = { path = "../utils/python/jwt" }
+chongming-config = { path = "../utils/python/config" }
 
 [dependency-groups]
 dev = [

@@ -339,6 +339,8 @@ class ChongmingCache:
                     await callback(entry) # type: ignore
             except asyncio.CancelledError:
                 pass  # 外部调用 task.cancel() 时正常退出
+            except Exception:
+                pass  # 关闭过程中可能发生 TimeoutError 等异常（如 NATS 连接被 drain），安全忽略
             finally:
                 await watcher.stop()
 

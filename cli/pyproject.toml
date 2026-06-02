@@ -9,8 +9,11 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.18.4",
     "chongming-worker",
     "minio>=7.2.20",
+    "psycopg2-binary>=2.9.12",
+    "sqlmodel>=0.0.38",
 ]
 
 [project.scripts]

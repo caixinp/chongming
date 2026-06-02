@@ -1,0 +1,27 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[project]
+name = "chongming-database"
+version = "0.1.0"
+description = "Database initialization utility for chongming workers"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chongming-config",
+    "chongming-cache",
+    "sqlmodel",
+    "asyncpg"
+]
+
+[[tool.uv.index]]
+default = true
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chongming_database"]
+
+[tool.uv.sources]
+chongming-config = { path = "../config" }
+chongming-cache = { path = "../cache" }

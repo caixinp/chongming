@@ -7,40 +7,43 @@ Chongming 微服务体系的 **Python Worker 生命周期管理框架**。自动
 
 ---
 
+## 👑 核心设计：配置即声明（Config-Driven）
+
+**Worker 的所有行为由 `config.toml` 驱动。** 框架遵循"配置即声明"原则——你在 `config.toml` 中声明的路由、参数、连接信息，框架自动将其转化为可运行的微服务。
+
+```
+┌──────────────────────────────────────────────────────┐
+│                    config.toml                       │
+│  ┌──────────┐ ┌──────┐ ┌──────────────┐ ┌─────────┐ │
+│  │ [worker]  │ │[nats]│ │[registration]│ │logging. │ │
+│  │ name      │ │ urls │ │ service      │ │ minio   │ │
+│  │ version   │ │      │ │ heartbeat    │ │         │ │
+│  └──────────┘ └──────┘ │   ┌─ items[]  │ └─────────┘ │
+│                         │   │ subject   │             │
+│                         │   │ method    │             │
+│                         │   │ path      │             │
+│                         │   │ params    │             │
+│                         │   │ ttl/timeout            │
+│                         │   │ response_model          │
+│                         └───┴───────────┘             │
+└─────────────────────────┬────────────────────────────┘
+                          │ 加载
+                          ▼
+                ┌─────────────────────┐
+                │  WorkerLifespan     │
+                │  (自动: NATS 连接、   │
+                │   路由注册、心跳、    │
+                │   消息分发优雅关闭)    │
+                └─────────────────────┘
+```
+
+---
+
 ## 快速开始（3 分钟）
 
-### 1. 安装
-
-```bash
-uv add chongming-worker
-```
-
-### 2. 创建 Handler
-
-```python
-# app/handlers/hello.py
-from chongming_worker.worker_lifespan import WorkerLifespan
-
-app = WorkerLifespan("config.toml")
-
-@app.handler("hello.world")
-async def hello(name: str) -> dict:
-    """说你好"""
-    return {"message": f"Hello, {name}!", "timestamp": time.time()}
-```
-
-### 3. 启动
-
-```python
-# main.py
-from app.bootstrap import app
-app.run()
-```
-
-### 4. 配置
+### 第 0 步：编写 `config.toml`（Worker 的核心）
 
 ```toml
-# config.toml — Worker 唯一配置文件
 [worker]
 name = "my-worker"
 
@@ -56,6 +59,8 @@ items = [
         method = "GET",
         path = "/hello",
         params = ["name: str"],
+        ttl = 30,
+        timeout = 2.0,
         response_model = {
             message = ["str", "__required__"],
             timestamp = ["float", 0.0]
@@ -64,7 +69,33 @@ items = [
 ]
 ```
 
-就是这样！启动后 Worker 会自动连接 NATS、注册路由到 Gateway，开始处理请求。
+### 第 1 步：创建 Handler
+
+```python
+# app/handlers/hello.py
+from chongming_worker.worker_lifespan import WorkerLifespan
+
+app = WorkerLifespan("config.toml")  # ← 加载 config.toml
+
+@app.handler("hello.world")          # ← 匹配 config.toml 中的 subject
+async def hello(name: str) -> dict:
+    """说你好"""
+    return {"message": f"Hello, {name}!", "timestamp": time.time()}
+```
+
+### 第 2 步：启动
+
+```python
+# main.py
+from app.bootstrap import app
+app.run()
+```
+
+**启动后框架自动：**
+1. 加载 `config.toml` → 读取 `[worker]`、`[nats]`、`[registration]` 配置
+2. 连接 NATS → 使用 `[nats].urls`
+3. 注册路由 → 遍历 `items[]` 逐条注册
+4. 启动心跳 → 每 `heartbeat_interval` 秒一次
 
 ---
 
@@ -73,7 +104,7 @@ items = [
 ### 启动流程
 
 ```
-config.toml 加载
+config.toml 加载 ──────────────────── ← Worker 名称、NATS 地址、路由配置（items）
       │
       ▼
   ┌─────────────────┐
@@ -84,31 +115,30 @@ config.toml 加载
             ▼
   ┌─────────────────┐
   │  @app.handler()  │  ← 装饰器注册 handler（可以有多个）
-  │  注册 handler    │
+  │  注册 handler    │      subject 必须与 config.toml items 匹配
   └─────────┬───────┘
-            │  @app.handler("calc.add")
             ▼
   ┌─────────────────┐
   │  app.run()      │  ← 进入事件循环
   └─────────┬───────┘
             │
             ▼
-  ┌─────────────────────┐
-  │  app.start()         │
-  │  ├─ 连接 NATS 集群    │
-  │  ├─ 注册当前服务      │  ← 发注册消息到 service.registry
-  │  ├─ 订阅所有 subject  │  ← 开始监听消息
-  │  └─ 启动心跳定时器    │  ← 每 heartbeat_interval 秒发一次心跳
-  └─────────┬───────────┘
+  ┌─────────────────────────────┐
+  │  app.start()                 │
+  │  ├─ 连接 NATS 集群            │ ← 使用 config.toml [nats] urls
+  │  ├─ 注册当前服务              │ ← 遍历 items[] 注册每个 subject
+  │  ├─ 订阅所有 subject          │ ← 开始监听消息
+  │  └─ 启动心跳定时器            │ ← 每 heartbeat_interval 秒
+  └─────────┬───────────────────┘
             │
             ▼
-  ┌─────────────────────┐
-  │  循环处理消息         │
-  │  ├─ 收到 NATS 请求    │
-  │  ├─ 解析参数          │
-  │  ├─ 调用 handler      │  ← 你的业务代码在这里执行
-  │  └─ 返回响应          │
-  └─────────────────────┘
+  ┌─────────────────────────────┐
+  │  循环处理消息                  │
+  │  ├─ 收到 NATS 请求            │
+  │  ├─ 按 config.toml params     │ ← 解析参数
+  │  ├─ 调用 handler              │ ← 你的业务代码在这里执行
+  │  └─ 返回响应                  │
+  └─────────────────────────────┘
 ```
 
 ### 关闭流程
@@ -119,32 +149,185 @@ config.toml 加载
       ▼
   ┌─────────────────────┐
   │  app.shutdown()      │
-  │  ├─ 停止心跳          │  ← 停止定时器
-  │  ├─ 取消所有订阅      │  ← 取消 NATS 订阅
-  │  ├─ 注销当前服务      │  ← 通知 Gateway 移除路由
-  │  └─ 关闭 NATS 连接    │  ← 断开与 NATS 集群的连接
+  │  ├─ 停止心跳          │
+  │  ├─ 取消所有订阅      │
+  │  ├─ 注销服务          │  ← 通知 Gateway 移除路由
+  │  └─ 关闭 NATS 连接    │
   └─────────────────────┘
 ```
+
+### 生命周期钩子（启动/关闭回调）
+
+Handler 模块可以通过 `on_start` / `on_stop` 注册回调，让 `WorkerLifespan` 在恰当的时机自动调用它们。
+
+#### 动机
+
+有些初始化工作需要在 NATS 就绪后才能执行，例如：
+- 连接数据库、Redis 等外部服务
+- 监听 NATS KV 桶的配置变更
+- 加载缓存或模型文件
+
+同样地，关闭时需要优雅释放这些资源。
+
+#### 基本用法（装饰器风格）
+
+```python
+from app.bootstrap import app
+
+@app.on_start
+async def setup_db_pool():
+    """NATS 连接就绪后，初始化数据库连接池"""
+    global db_pool
+    db_pool = await create_database_pool(
+        host="localhost",
+        port=5432,
+    )
+    logger.info("Database pool initialized")
+
+@app.on_stop
+async def close_db_pool():
+    """关闭前释放数据库连接池"""
+    global db_pool
+    if db_pool:
+        await db_pool.close()
+        logger.info("Database pool closed")
+```
+
+#### 基本用法（方法调用风格）
+
+```python
+from app.bootstrap import app
+
+async def setup_db_pool():
+    global db_pool
+    db_pool = await create_database_pool(...)
+
+async def close_db_pool():
+    global db_pool
+    if db_pool:
+        await db_pool.close()
+
+# 注册启动/关闭钩子（方法调用风格）
+app.on_start(setup_db_pool)
+app.on_stop(close_db_pool)
+```
+
+#### 实际案例：监听网关配置变更
+
+这是一个真实场景：监听 `_gw_config_` KV 桶中的 `gateway_config` 键变更，当网关更新 JWT 密钥时，实时同步更新。
+
+```python
+# app/handlers/auth.py
+import asyncio
+import json
+import logging
+from typing import Any, Dict, Optional
+
+from app.bootstrap import app
+from chongming_cache import ChongmingCache
+from chongming_jwt import JWTAuth
+
+logger = logging.getLogger("chongming.worker.user_auth")
+
+jwt_auth = None
+_listener_cache: Optional[ChongmingCache] = None
+_listener_task: Optional[asyncio.Task] = None
+
+
+async def listen_gateway_config_changes():
+    """启动监听：订阅 _gw_config_ 桶中 gateway_config 键的变更"""
+    global _listener_task, _listener_cache, jwt_auth
+
+    _listener_cache = ChongmingCache(logger, bucket="_gw_config_")
+    await _listener_cache.connect()
+
+    # 1. 读取当前配置，初始化 jwt_auth
+    entry = await _listener_cache.get("gateway_config")
+    if entry is not None:
+        gateway_config = json.loads(entry.value.decode())
+        jwt_auth = JWTAuth(gateway_config.get("jwt", {}))
+
+    # 2. 订阅后续变更
+    _listener_task = await _listener_cache.subscribe(
+        "gateway_config",
+        _on_gateway_config_change,
+    )
+    logger.info("Listening for gateway config changes...")
+
+
+async def _on_gateway_config_change(entry):
+    """配置变更回调：更新 jwt_auth"""
+    global jwt_auth
+    gateway_config = json.loads(entry.value.decode())
+    jwt_auth = JWTAuth(gateway_config.get("jwt", {}))
+    logger.info("Updated JWTAuth from config change (rev=%d)", entry.revision)
+
+
+async def stop_listener():
+    """停止监听：取消任务、关闭连接"""
+    global _listener_task, _listener_cache
+    if _listener_task:
+        _listener_task.cancel()
+        try:
+            await _listener_task
+        except asyncio.CancelledError:
+            pass
+    if _listener_cache:
+        await _listener_cache.close()
+
+
+# 注册生命周期钩子
+app.on_start(listen_gateway_config_changes)
+app.on_stop(stop_listener)
+
+
+@app.handler("user.auth")
+async def auth_user(data: Any) -> Dict:
+    return {
+        "status": "success",
+        "token": "fake-jwt-token",
+        "timestamp": time.time(),
+    }
+```
+
+#### 执行时序
+
+```
+app.start()
+  ├─ NATS connect
+  ├─ run on_start hooks ──→ listen_gateway_config_changes()
+  │                           ├─ 连接 _gw_config_ 桶
+  │                           ├─ 读取当前配置 → 初始化 jwt_auth
+  │                           └─ subscribe gateway_config
+  ├─ 注册到网关
+  ├─ 订阅 NATS subject
+  └─ 开始心跳
+
+... 运行中 ...
+  网关更新配置 → KV 变更 → 回调触发 → jwt_auth 自动更新
+
+SIGINT/SIGTERM → app.shutdown()
+  ├─ 取消心跳
+  ├─ 取消 NATS 订阅
+  ├─ 注销服务
+  ├─ 关闭 NATS 连接
+  └─ run on_stop hooks (相反顺序) ──→ stop_listener()
+                                        ├─ cancel() 监听任务
+                                        └─ close() KV 连接
+```
+
+#### 钩子数量与执行顺序
+
+- 多个 `on_start` 钩子按注册顺序依次执行
+- 多个 `on_stop` 钩子按**相反顺序**执行（后注册的先执行），确保释放顺序与创建顺序相反
+- 某个钩子失败时**仅记录日志**，不会阻止后续钩子或 Worker 的启动/关闭
 
 ### 连接重连
 
 NATS 断开后，框架会自动重连，重连后自动重新注册服务和订阅：
 
 ```
-NATS 断开
-      │
-      ▼
-  ┌──────────────────┐
-  │  _on_disconnected │  ← 日志警告
-  └────────┬─────────┘
-           ▼
-  ┌──────────────────┐
-  │  NATS 自动重连     │  ← NATS 客户端内部机制
-  └────────┬─────────┘
-           ▼
-  ┌──────────────────┐
-  │  _on_reconnected  │  ← 重新注册服务 + 重新订阅
-  └──────────────────┘
+NATS 断开 → NATS 自动重连 → 重新读取 config.toml 注册信息 → 重新注册服务 + 重新订阅
 ```
 
 ---
@@ -160,12 +343,13 @@ async def add(a: float, b: float) -> dict:
     return {"result": a + b, "operation": "add", "timestamp": time.time()}
 ```
 
-**规则：**
-- 函数名不限，但建议与 subject 对应
-- **参数名必须**与 config.toml 中 `params` 定义一致
-- **类型注解**用于自动类型转换
-- 返回 `dict`，按 config.toml 的 `response_model` 结构返回
-- 函数中可使用 `_app` 和 `_nc` 参数（见下文）
+**⚠️ 关键规则：Handler 的 subject 必须与 `config.toml` 中的 `subject` 匹配**
+
+| 元素 | 定义位置 | 一致性要求 |
+|------|----------|-----------|
+| subject | `config.toml` items 的 `subject` 字段 | **必须**匹配 `@app.handler("calc.add")` |
+| 参数名 | `config.toml` items 的 `params` 字段 | **必须**与 handler 函数参数名一致 |
+| 参数类型 | `config.toml` items 的 `params` 类型注解 | 用于自动类型转换 |
 
 ### 服务间通信（`_app` 注入）
 
@@ -195,8 +379,6 @@ async def create_order(
 
 ### 原始 NATS 连接（`_nc` 注入）
 
-需要直接操作 NATS 连接时，使用 `_nc` 参数：
-
 ```python
 @app.handler("user.health_check")
 async def health_check(_nc: Nats) -> dict:
@@ -208,6 +390,8 @@ async def health_check(_nc: Nats) -> dict:
         "timestamp": time.time(),
     }
 ```
+
+> **注意：** `_app` 和 `_nc` 是框架自动注入的，**不需要在 config.toml 的 `params` 中声明**。
 
 ### 参数自动解析规则
 
@@ -254,7 +438,7 @@ app = WorkerLifespan(config_path: str = "config.toml")
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `config_path` | `str` | `"config.toml"` | 配置文件路径 |
+| `config_path` | `str` | `"config.toml"` | **配置文件路径**（Worker 所有配置来源） |
 
 #### 配置校验
 
@@ -276,7 +460,7 @@ async def handler(...):
 
 | 参数 | 说明 |
 |------|------|
-| `subject` | NATS subject（必填）。未指定时从配置推断，再回退为函数名 |
+| `subject` | NATS subject（必填）。**必须匹配 config.toml items 中的 subject** |
 
 **参数注入：**
 
@@ -308,12 +492,6 @@ if __name__ == "__main__":
 await app.start()
 ```
 
-执行顺序：
-1. 连接 NATS
-2. 注册服务到 Gateway
-3. 订阅所有 handler 的 subject
-4. 启动心跳
-
 ---
 
 ### `app.shutdown()`
@@ -323,12 +501,6 @@ await app.start()
 ```python
 await app.shutdown()
 ```
-
-执行顺序：
-1. 停止心跳
-2. 取消所有订阅
-3. 注销服务
-4. 关闭 NATS 连接
 
 ---
 
@@ -340,13 +512,6 @@ await app.shutdown()
 result = await app.request("user.query", {"user_id": "u001"})
 ```
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `subject` | `str` | 目标 handler 的 subject |
-| `data` | `dict` | 请求参数 |
-
----
-
 ### `app.publish(subject, data)`
 
 异步广播消息（NATS Publish），不等待响应。
@@ -357,9 +522,79 @@ await app.publish("notification.order_created", {"order_id": "xxx"})
 
 ---
 
-## 配置参考
+## config.toml 配置参考
 
-完整配置说明见 [CLI README — Worker config.toml 配置详解](../../cli/README.md#worker-configtoml-配置详解)。
+### 完整结构
+
+```toml
+# ── Worker 元信息 ──────────────────────────────────
+[worker]
+name = "my-worker"
+version = "0.1.0"
+description = "..."
+
+# ── NATS 连接信息 ──────────────────────────────────
+[nats]
+urls = [
+    "nats://localhost:4222",
+    "nats://localhost:4223",
+    "nats://localhost:4224"
+]
+
+# ── 路由注册配置 ────────────────────────────────────
+[registration]
+type = "register"
+service = "my-worker"
+queue_group = "my-workers"    # 同组 worker 实现负载均衡
+tags = ["my-tag"]
+heartbeat_interval = 15       # 心跳间隔（秒）
+
+# ── ★ 核心：所有路由定义 ────────────────────────────
+items = [
+    {
+        subject = "calc.add",               # NATS 主题名（必填）
+        method = "GET",                     # HTTP 方法（必填）
+        path = "/add",                      # URL 路径（必填）
+        params = ["a: float", "b: float"],  # 参数列表
+        summary = "Add two numbers",        # OpenAPI 摘要
+        docstring = "详细说明",               # OpenAPI 描述
+        ttl = 30,                           # 路由 TTL（秒）
+        timeout = 2.0,                      # 超时时间（秒）
+        response_model = {                  # 响应模型
+            result = ["float", "__required__"],
+            operation = ["str", "add"],
+            timestamp = ["float", 0.0]
+        },
+        shared = false,      # 是否共享模型
+        internal = false,    # 是否内部 handler（不在 Swagger 展示）
+        auth_required = true,# 是否需要 JWT 认证
+    },
+]
+
+# ── MinIO 日志（可选） ─────────────────────────────
+[logging.minio]
+enabled = true
+endpoint = "localhost:9000"
+bucket = "chongming-logs"
+retention_days = 30
+```
+
+### 字段速查表
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 | 定义位置 |
+|------|------|------|--------|------|----------|
+| `[worker].name` | string | ✅ | — | Worker 唯一标识 | config.toml |
+| `[nats].urls` | array | ✅ | — | NATS 集群地址列表 | config.toml |
+| `[registration].service` | string | ✅ | — | 服务名，Gateway URL 前缀 | config.toml |
+| `[registration].heartbeat_interval` | int | ❌ | 15 | 心跳间隔（秒） | config.toml |
+| `items[].subject` | string | ✅ | — | NATS 主题名 | config.toml |
+| `items[].method` | string | ✅ | — | HTTP 方法 | config.toml |
+| `items[].path` | string | ✅ | — | URL 路径 | config.toml |
+| `items[].params` | array | ❌ | `[]` | 参数列表 `["name: type"]` | **必须与 handler 一致** |
+| `items[].ttl` | int | ❌ | 30 | 路由 TTL（秒），**需 > heartbeat** | config.toml |
+| `items[].timeout` | float | ❌ | 2.0 | NATS request 超时 | config.toml |
+| `items[].response_model` | dict | ❌ | `{}` | 响应结构定义 | config.toml |
+| `items[].internal` | bool | ❌ | `false` | 不在 Swagger 公开 | config.toml |
 
 ---
 
@@ -369,7 +604,7 @@ await app.publish("notification.order_created", {"order_id": "xxx"})
 import time
 from chongming_worker.worker_lifespan import WorkerLifespan
 
-app = WorkerLifespan("config.toml")
+app = WorkerLifespan("config.toml")  # ← 一切从 config.toml 开始
 
 @app.handler("calc.add")
 async def add(a: float, b: float) -> dict:
@@ -387,23 +622,12 @@ async def user_query(user_id: str, _app: WorkerLifespan) -> dict:
 @app.handler("order.create")
 async def create_order(user_id: str, amount: float, item: str, _app: WorkerLifespan) -> dict:
     """创建订单（演示 _app.request + _app.publish）"""
-    # 1. 调用 user.query 获取用户信息
     user = await _app.request("user.query", {"user_id": user_id})
-    
     order_id = f"ORD-{int(time.time())}"
-    
-    # 2. 广播通知
     await _app.publish("notification.order_created", {
         "order_id": order_id, "user_id": user_id, "item": item, "amount": amount,
     })
-    
     return {"order_id": order_id, "user": user, "item": item, "amount": amount, "status": "created"}
-
-@app.handler("notification.order_created")
-async def on_order_created(order_id: str, user_id: str, item: str, amount: float, timestamp: float) -> dict:
-    """处理订单创建通知（通过 publish 触发）"""
-    print(f"收到通知：订单 {order_id} 已创建")
-    return {"status": "notified", "message": f"Order {order_id} processed"}
 
 @app.handler("system.info")
 async def system_info(_app: WorkerLifespan) -> dict:

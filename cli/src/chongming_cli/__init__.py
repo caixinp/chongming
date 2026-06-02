@@ -13,6 +13,7 @@ from .commands.binary_build import add_binary_build_parser, handle_binary_build
 from .commands.docker import add_docker_parser, handle_docker
 from .commands.image_export import add_image_export_parser, handle_image_export
 from .commands.log_export import add_log_export_parser, handle_log_export
+from .commands.migrate import add_db_parser, handle_db
 
 
 def main():
@@ -38,6 +39,9 @@ def main():
     add_docker_parser(subparsers)
     add_image_export_parser(subparsers)
     add_log_export_parser(subparsers)
+
+    # ── 数据库迁移 ─────────────────────────────────────────────
+    add_db_parser(subparsers)
 
     args = parser.parse_args()
 
@@ -66,6 +70,10 @@ def main():
         handle_image_export(args)
     elif args.command == "log-export":
         handle_log_export(args)
+
+    # ── 数据库迁移 ──
+    elif args.command == "db":
+        handle_db(args)
 
     else:
         parser.print_help()

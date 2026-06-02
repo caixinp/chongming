@@ -2,7 +2,6 @@ import logging
 import uuid
 from .nats_client import get_nats_client
 from fastapi import Request, HTTPException, FastAPI
-from fastapi.responses import JSONResponse
 import json
 import asyncio
 from typing import List, Optional, Dict, Any, Type, Union, Tuple
@@ -132,7 +131,29 @@ class DynamicRoute:
         if isinstance(model_def, dict):
             normalized_fields = {}
             for field_name, field_type in model_def.items():
-                if isinstance(field_type, (tuple, list)):
+                # ── TOML 字典格式：{ type = "str", required = true, default = "val" } ────
+                # 例如：status = { type = "bool", required = true }
+                if isinstance(field_type, dict):
+                    type_spec = field_type.get("type", "str")
+                    required = field_type.get("required", False)
+                    default = field_type.get("default") if not required else None
+                    nested_schema = field_type.get("nested") or field_type.get("schema")
+
+                    if type_spec.lower() in ("object", "dict") and nested_schema is not None and isinstance(nested_schema, dict):
+                        nested_model = self._create_response_model(
+                            nested_schema,
+                            subject=f"{subject}_{field_name}",
+                            depth=depth + 1,
+                        )
+                        normalized_fields[field_name] = (nested_model, ...) if required else (Optional[nested_model], default)
+                    else:
+                        resolved_type = self._resolve_type(type_spec)
+                        if required:
+                            normalized_fields[field_name] = (resolved_type, ...)
+                        else:
+                            normalized_fields[field_name] = (resolved_type, default)
+
+                elif isinstance(field_type, (tuple, list)):
                     type_spec = field_type[0]
                     default = field_type[1] if len(field_type) > 1 else None
                     nested_schema = field_type[2] if len(field_type) > 2 else None

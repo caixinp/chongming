@@ -2,6 +2,7 @@
 name = "example"
 version = "0.1.0"
 description = "chongming worker example — covers all WorkerLifespan features"
+config_version = "2.0"
 
 [nats]
 urls = [
@@ -12,168 +13,155 @@ urls = [
 
 [registration]
 type = "register"
-service = "calc"
-queue_group = "calc-workers"  # Queue Group 名称，同 group 的 worker 实现负载均衡
+service = "example"
+queue_group = "calc-workers"
 router_prefix = "/calc"
-tags = ["calculator", "worker-comm-demo"]
-heartbeat_interval = 15  # 心跳间隔（秒），TTL 必须大于此值
+tags = ["example"]
+heartbeat_interval = 15
+config_version = "2.0"
+
+# ── 默认值继承 ──────────────────────────────────────────
+defaults = { method = "GET", ttl = 30, timeout = 2.0, auth_required = true }
+
 items = [
-    # ── 基础运算（纯业务逻辑） ────────────────────────────────────
+    # ── 基础运算 ─────────────────────────────────────────────────
     {
         subject = "calc.add",
-        method = "GET",
         path = "/add",
+        shared = true,
         summary = "Add two numbers",
         docstring = "Add two numbers and return result with metadata",
         params = ["a: float", "b: float"],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            result = ["float", "__required__"],
-            operation = ["str", "add"],
-            timestamp = ["float", 0.0]
+            result = { type = "float", required = true },
+            operation = { type = "str", default = "add" },
+            timestamp = { type = "float", default = 0.0 }
         }
     },
     {
         subject = "calc.subtract",
-        method = "GET",
         path = "/subtract",
         summary = "Subtract two numbers",
         docstring = "Subtract b from a and return result with metadata",
         params = ["a: float", "b: float"],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            result = ["float", "__required__"],
-            operation = ["str", "subtract"],
-            timestamp = ["float", 0.0]
+            result = { type = "float", required = true },
+            operation = { type = "str", default = "subtract" },
+            timestamp = { type = "float", default = 0.0 }
         }
     },
     {
         subject = "calc.multiply",
-        method = "GET",
         path = "/multiply",
         summary = "Multiply two numbers",
         docstring = "Multiply two numbers and return result with metadata",
         params = ["a: float", "b: float"],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            result = ["float", "__required__"],
-            operation = ["str", "multiply"],
-            timestamp = ["float", 0.0]
+            result = { type = "float", required = true },
+            operation = { type = "str", default = "multiply" },
+            timestamp = { type = "float", default = 0.0 }
         }
     },
     {
         subject = "calc.divide",
-        method = "GET",
         path = "/divide",
         summary = "Divide two numbers",
         docstring = "Divide a by b and return result with metadata",
         params = ["a: float", "b: float"],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            result = ["float", "__required__"],
-            operation = ["str", "divide"],
-            timestamp = ["float", 0.0]
+            result = { type = "float", required = true },
+            operation = { type = "str", default = "divide" },
+            timestamp = { type = "float", default = 0.0 }
         }
     },
-    # ── Worker 间通讯：被动服务（被 _app.request() 调用） ──────────
+    # ── Worker 间通讯：被动服务 ──────────────────────────────────
     {
         subject = "user.query",
-        method = "GET",
         path = "/user/query",
         summary = "Query user info (worker-to-worker: passive responder)",
         docstring = "Query user information by user_id. Used by order.create via _app.request()",
         params = ["user_id: str"],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            user_id = ["str", "__required__"],
-            name = ["str", "__required__"],
-            balance = ["float", 0.0],
-            level = ["str", "normal"],
-            queried_at = ["float", 0.0]
+            user_id = { type = "str", required = true },
+            name = { type = "str", required = true },
+            balance = { type = "float", default = 0.0 },
+            level = { type = "str", default = "normal" },
+            queried_at = { type = "float", default = 0.0 }
         }
     },
-    # ── Worker 间通讯：主动调用方（_app.request + _app.publish） ──
+    # ── Worker 间通讯：主动调用方 ────────────────────────────────
     {
         subject = "order.create",
         method = "POST",
         path = "/order/create",
-        summary = "Create order (demonstrates _app.request & _app.publish)",
-        docstring = "Create order. Internally calls user.query (request mode) and notification.order_created (pub/sub mode). Demonstrates _app injection for worker-to-worker communication.",
-        params = ["user_id: str", "amount: float", "item: str"],
-        ttl = 30,
         timeout = 10.0,
+        summary = "Create order (demonstrates _app.request & _app.publish)",
+        docstring = "Create order. Internally calls user.query (request mode) and notification.order_created (pub/sub mode).",
+        params = ["user_id: str", "amount: float", "item: str"],
         response_model = {
-            order_id = ["str", "__required__"],
-            user = ["object", "__required__", {
-                user_id = ["str", "__required__"],
-                name = ["str", "__required__"],
-                balance = ["float", 0.0],
-                level = ["str", "normal"],
-                queried_at = ["float", 0.0]
-            }],
-            item = ["str", "__required__"],
-            amount = ["float", "__required__"],
-            status = ["str", "created"],
-            timestamp = ["float", 0.0]
+            order_id = { type = "str", required = true },
+            user = { type = "object", required = true, fields = {
+                user_id = { type = "str", required = true },
+                name = { type = "str", required = true },
+                balance = { type = "float", default = 0.0 },
+                level = { type = "str", default = "normal" },
+                queried_at = { type = "float", default = 0.0 }
+            }},
+            item = { type = "str", required = true },
+            amount = { type = "float", required = true },
+            status = { type = "str", default = "created" },
+            timestamp = { type = "float", default = 0.0 }
         }
     },
-    # ── Worker 间通讯：异步通知接收方（通过 publish() 触发） ──────
+    # ── Worker 间通讯：异步通知 ─────────────────────────────────
     {
         subject = "notification.order_created",
         method = "POST",
         path = "/notification/order_created",
+        auth_required = false,
         summary = "Order created notification (pub/sub pattern)",
         docstring = "Process order creation notification. Fanned out via _app.publish() and runs independently.",
         params = ["order_id: str", "user_id: str", "user_name: str", "item: str", "amount: float", "timestamp: float"],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            status = ["str", "notified"],
-            message = ["str", "__required__"],
-            order_id = ["str", "__required__"],
-            notified_at = ["float", 0.0]
+            status = { type = "str", default = "notified" },
+            message = { type = "str", required = true },
+            order_id = { type = "str", required = true },
+            notified_at = { type = "float", default = 0.0 }
         },
         internal = true
     },
-    # ── NATS 连接注入（_nc 参数演示） ─────────────────────────────
+    # ── NATS 连接注入 ───────────────────────────────────────────
     {
         subject = "user.health_check",
         method = "GET",
         path = "/user/health",
+        auth_required = false,
         summary = "Health check via _nc (raw NATS connection injection)",
         docstring = "Health check that uses _nc (raw NATS connection) injected by the framework",
         params = [],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            status = ["str", "__required__"],
-            nats_server = ["str", "__required__"],
-            timestamp = ["float", 0.0]
+            status = { type = "str", required = true },
+            nats_server = { type = "str", required = true },
+            timestamp = { type = "float", default = 0.0 }
         },
         internal = true
     },
-    # ── WorkerLifespan 实例注入（_app.nats_connection 演示） ──────
+    # ── WorkerLifespan 实例注入 ─────────────────────────────────
     {
         subject = "system.info",
         method = "GET",
         path = "/system/info",
+        auth_required = false,
         summary = "System info via _app.nats_connection (WorkerLifespan injection)",
         docstring = "Returns system info by accessing _app.nats_connection property",
         params = [],
-        ttl = 30,
-        timeout = 2.0,
         response_model = {
-            status = ["str", "__required__"],
-            nats_server = ["str", "__required__"],
-            worker_name = ["str", "__required__"],
-            registered_subjects = ["list", []],
-            heartbeat_interval = ["float", 15.0],
-            timestamp = ["float", 0.0]
+            status = { type = "str", required = true },
+            nats_server = { type = "str", required = true },
+            worker_name = { type = "str", required = true },
+            registered_subjects = { type = "list", default = [] },
+            heartbeat_interval = { type = "float", default = 15.0 },
+            timestamp = { type = "float", default = 0.0 }
         },
         internal = true
     }

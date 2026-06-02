@@ -4,6 +4,26 @@
 
 ---
 
+## 🎯 核心概念：`config.toml` 驱动一切
+
+与 Python Worker 一样，**Rust Worker 也完全由 `config.toml` 驱动**。Worker 启动后首先加载 `config.toml`，根据其中的配置连接 NATS、注册路由、启动心跳。
+
+Rust Worker 的 `config.toml` 格式与 Python 版**完全兼容**，区别在于：
+- Rust 使用 **Builder 模式**（`.handle().build()`）注册 handler
+- Python 使用 **装饰器模式**（`@app.handler()`）
+
+```
+config.toml（Rust & Python 格式完全相同！）
+    │
+    ├─ [worker]         → Worker 名称、版本
+    ├─ [nats]           → NATS 集群地址
+    ├─ [registration]   → 服务名、队列组、心跳间隔
+    │   └─ items[]      → ★ 所有 handler 的路由定义（subject, method, path, params...）
+    └─ [logging.minio]  → 日志配置
+```
+
+---
+
 ## 业务功能
 
 | 接口 | 方法 | 路径 | 说明 |
@@ -41,9 +61,10 @@ cargo run
 ```
 
 启动后自动：
-1. 连接 NATS 集群
-2. 向 Gateway 注册路由（通过 `service.registry` 主题）
-3. 开始心跳保活（默认每 15 秒）
+1. **读取 `config.toml` 配置**
+2. 连接 NATS 集群
+3. 向 Gateway 注册路由（通过 `service.registry` 主题）
+4. 开始心跳保活（默认每 15 秒）
 
 ### 测试
 
@@ -72,8 +93,10 @@ curl "http://localhost:8000/api/v1/calc/divide?a=1&b=0"
 ```
 workers/example_rs/
 ├── src/
-│   └── main.rs      # ★ 业务逻辑 — 类型安全的 Rust 实现
-├── config.toml      # ★ 服务配置 — NATS、路由注册、心跳
+│   └── main.rs            # ★ 业务逻辑 — 类型安全的 Rust 实现
+├── config.toml            # ★★ 核心配置文件 — Worker 的"心脏"
+│                           #    定义 NATS 连接、路由注册、心跳间隔、
+│                           #    所有 handler 的 subject/method/path/params
 ├── Cargo.toml
 └── README.md
 ```
@@ -139,8 +162,8 @@ async fn main() -> Result<()> {
         .with_env_filter("info")
         .init();
 
-    let mut app = WorkerBuilder::from_config("config.toml")?
-        .handle("calc.add", add)
+    let mut app = WorkerBuilder::from_config("config.toml")?  // ← 加载 config.toml
+        .handle("calc.add", add)       // ← subject 必须与 config.toml items 一致
         .handle("calc.subtract", subtract)
         .handle("calc.multiply", multiply)
         .handle("calc.divide", divide)
@@ -150,10 +173,50 @@ async fn main() -> Result<()> {
 }
 ```
 
-Rust 版本利用**编译期类型安全**优势：
-- `CalcInput` / `CalcOutput` 通过派生宏自动处理 JSON 序列化
-- 参数类型在编译时检查
-- 错误处理使用 `anyhow`
+**`WorkerBuilder::from_config("config.toml")`** 加载配置后，`.handle("calc.add", add)` 中的 `"calc.add"` 必须匹配 `config.toml` 中某条 `item` 的 `subject` 字段 —— **与 Python 版的 `@app.handler("calc.add")` 规则完全相同**。
+
+---
+
+## config.toml（与 Python 版格式兼容）
+
+```toml
+[worker]
+name = "example_rs"
+version = "0.1.0"
+description = "Rust calculator worker example"
+
+[nats]
+urls = [
+    "nats://localhost:4222",
+    "nats://localhost:4223",
+    "nats://localhost:4224"
+]
+
+[registration]
+type = "register"
+service = "example_rs"
+queue_group = "calc-workers"
+router_prefix = "/calc"
+tags = ["calculator", "rust"]
+heartbeat_interval = 15
+
+items = [
+    {
+        subject = "calc.add",
+        method = "GET",
+        path = "/add",
+        params = ["a: float", "b: float"],
+        ttl = 30,
+        timeout = 2.0,
+        response_model = {
+            result = ["float", "__required__"],
+            operation = ["str", "add"],
+            timestamp = ["float", 0.0]
+        }
+    },
+    # ... subtract, multiply, divide 同理
+]
+```
 
 ---
 
@@ -163,6 +226,8 @@ Rust 版本利用**编译期类型安全**优势：
 |------|--------------|-------------|
 | 框架 | `chongming_worker` (Python) | `chongming_worker` (Rust) |
 | 构造方式 | 装饰器 `@app.handler()` | Builder 模式 `.handle().build()` |
+| 配置驱动 | 加载 `config.toml` | **同样加载 `config.toml`** |
+| 路由定义 | **`config.toml` items** | **同左 — 格式完全兼容** |
 | 类型安全 | 运行时类型转换 | 编译期类型检查 |
 | 日志 | Python logging | tracing crate |
 | 异步运行时 | asyncio | tokio |
@@ -172,7 +237,7 @@ Rust 版本利用**编译期类型安全**优势：
 
 ## 配置参考
 
-配置格式与 Python 版兼容，详见 [Rust Worker 框架文档](../../utils/rust/worker/README.md)。
+配置格式与 Python 版兼容，详见 [Rust Worker 框架文档](../../utils/rust/worker/README.md) 和 [CLI 文档 config.toml 详解](../../cli/README.md#worker-configtoml-配置详解)。
 
 ---
 

@@ -1,0 +1,303 @@
+[worker]
+name = "user_auth"
+version = "0.1.0"
+description = "user_auth 用户认证生成token"
+config_version = "2.0"
+
+[nats]
+urls = [
+    "nats://localhost:4222",
+    "nats://localhost:4223",
+    "nats://localhost:4224"
+]
+
+[registration]
+type = "register"
+service = "user_auth"
+queue_group = "user_auth"
+router_prefix = "/user_auth"
+tags = ["user_auth"]
+heartbeat_interval = 15
+config_version = "2.0"
+
+# ── 默认值继承 ──────────────────────────────────────────
+defaults = { method = "POST", ttl = 30, timeout = 2.0, auth_required = false }
+
+items = [
+    # ── 用户认证 ───────────────────────────────────────────────
+    {
+        subject = "user.auth",
+        path = "/user/auth",
+        shared = true,
+        summary = "用户验证",
+        params = ["user_id: str", "roles: list[str]", "username: str", "email: str", "other: dict[str,Any]"],
+        response_model = {
+            status = { type = "bool", required = true },
+            token = { type = "str", required = true },
+            timestamp = { type = "float", default = 0.0 }
+        },
+        internal = true,
+    },
+    {
+        subject = "user.login",
+        path = "/user/login",
+        shared = true,
+        docstring = "用户登录",
+        params = ["user_name: str", "password: str"],
+        response_model = {
+            status = { type = "bool", required = true },
+            token = { type = "str", required = true },
+            user_id = { type = "str", required = true },
+            username = { type = "str", required = true },
+            email = { type = "str", required = true },
+            other = { type = "dict", required = true },
+            roles = { type = "str", required = true },
+            timestamp = { type = "float", default = 0.0 }
+        }
+    },
+    {
+        subject = "user.register",
+        path = "/user/register",
+        shared = true,
+        summary = "用户注册",
+        params = ["username: str", "password: str", "email: str"],
+        response_model = {
+            status = { type = "bool", required = true },
+            token = { type = "str", required = true },
+            user_id = { type = "int", required = true },
+            username = { type = "str", required = true },
+            email = { type = "str", required = true },
+            roles = { type = "list", required = true },
+            timestamp = { type = "float", default = 0.0 }
+        }
+    },
+    {
+        subject = "user.create",
+        path = "/user/create",
+        summary = "创建用户（内部）",
+        params = ["username: str", "password_hash: str", "email: str", "roles: list[str]"],
+        response_model = {
+            id = { type = "int", required = true },
+            username = { type = "str", required = true },
+            email = { type = "str", required = true },
+            roles = { type = "list", required = true },
+            created_at = { type = "float", required = true }
+        },
+        internal = true,
+    },
+    {
+        subject = "user.get",
+        path = "/user/get",
+        shared = true,
+        summary = "获取用户",
+        params = ["user_id: int"],
+        response_model = {
+            id = { type = "int", required = true },
+            username = { type = "str", required = true },
+            email = { type = "str", required = true },
+            roles = { type = "list", required = true }
+        },
+        internal = true,
+    },
+    {
+        subject = "user.update",
+        path = "/user/update",
+        shared = true,
+        summary = "更新用户",
+        params = ["user_id: int", "username: str", "email: str", "roles: list[str]"],
+        response_model = {
+            id = { type = "int", required = true },
+            username = { type = "str", required = true },
+            email = { type = "str", required = true },
+            roles = { type = "list", required = true }
+        },
+        internal = true,
+    },
+    {
+        subject = "user.delete",
+        path = "/user/delete",
+        shared = true,
+        summary = "删除用户",
+        params = ["user_id: int"],
+        response_model = {
+            status = { type = "bool", required = true },
+            message = { type = "str", required = true }
+        },
+        internal = true,
+    },
+    {
+        subject = "user.list",
+        path = "/user/list",
+        method = "GET",
+        shared = true,
+        summary = "用户列表",
+        params = ["offset: int", "limit: int"],
+        response_model = {
+            users = { type = "list", required = true },
+            total = { type = "int", required = true },
+            offset = { type = "int", required = true },
+            limit = { type = "int", required = true }
+        },
+        internal = true,
+    },
+    # ── 角色管理 ─────────────────────────────────────────────────
+    {
+        subject = "role.create",
+        path = "/role/create",
+        summary = "创建角色",
+        params = ["name: str", "description: str"],
+        response_model = {
+            id = { type = "int", required = true },
+            name = { type = "str", required = true },
+            description = { type = "str", required = true },
+            is_system = { type = "bool", required = true }
+        }
+    },
+    {
+        subject = "role.get",
+        path = "/role/get",
+        summary = "获取角色详情",
+        params = ["role_id: int"],
+        response_model = {
+            id = { type = "int", required = true },
+            name = { type = "str", required = true },
+            description = { type = "str", required = true },
+            is_system = { type = "bool", required = true },
+            permissions = { type = "list", required = true }
+        }
+    },
+    {
+        subject = "role.update",
+        path = "/role/update",
+        summary = "更新角色",
+        params = ["role_id: int", "name: str", "description: str"],
+        response_model = {
+            id = { type = "int", required = true },
+            name = { type = "str", required = true },
+            description = { type = "str", required = true },
+            is_system = { type = "bool", required = true }
+        }
+    },
+    {
+        subject = "role.delete",
+        path = "/role/delete",
+        summary = "删除角色",
+        params = ["role_id: int"],
+        response_model = {
+            status = { type = "bool", required = true },
+            message = { type = "str", required = true }
+        }
+    },
+    {
+        subject = "role.list",
+        path = "/role/list",
+        method = "GET",
+        summary = "角色列表",
+        params = ["offset: int", "limit: int"],
+        response_model = {
+            roles = { type = "list", required = true },
+            total = { type = "int", required = true }
+        }
+    },
+    {
+        subject = "role.assign_permission",
+        path = "/role/assign_permission",
+        summary = "为角色分配权限",
+        params = ["role_id: int", "permission_name: str"],
+        response_model = {
+            status = { type = "bool", required = true },
+            message = { type = "str", required = true }
+        }
+    },
+    {
+        subject = "role.revoke_permission",
+        path = "/role/revoke_permission",
+        summary = "撤销角色的权限",
+        params = ["role_id: int", "permission_name: str"],
+        response_model = {
+            status = { type = "bool", required = true },
+            message = { type = "str", required = true }
+        }
+    },
+    # ── 权限管理 ─────────────────────────────────────────────────
+    {
+        subject = "permission.create",
+        path = "/permission/create",
+        summary = "创建权限",
+        params = ["name: str", "resource: str", "action: str", "description: str"],
+        response_model = {
+            id = { type = "int", required = true },
+            name = { type = "str", required = true },
+            resource = { type = "str", required = true },
+            action = { type = "str", required = true },
+            description = { type = "str", required = true }
+        }
+    },
+    {
+        subject = "permission.list",
+        path = "/permission/list",
+        summary = "权限列表",
+        params = ["offset: int", "limit: int", "resource: str"],
+        response_model = {
+            permissions = { type = "list", required = true },
+            total = { type = "int", required = true }
+        }
+    },
+    {
+        subject = "permission.delete",
+        path = "/permission/delete",
+        summary = "删除权限",
+        params = ["permission_id: int"],
+        response_model = {
+            status = { type = "bool", required = true },
+            message = { type = "str", required = true }
+        }
+    },
+    # ── 用户角色分配 ─────────────────────────────────────────────
+    {
+        subject = "userrole.assign",
+        path = "/userrole/assign",
+        summary = "为用户分配角色",
+        params = ["user_id: int", "role_name: str"],
+        response_model = {
+            status = { type = "bool", required = true },
+            message = { type = "str", required = true }
+        }
+    },
+    {
+        subject = "userrole.revoke",
+        path = "/userrole/revoke",
+        summary = "撤销用户角色",
+        params = ["user_id: int", "role_name: str"],
+        response_model = {
+            status = { type = "bool", required = true },
+            message = { type = "str", required = true }
+        }
+    },
+    {
+        subject = "userrole.list",
+        path = "/userrole/list",
+        summary = "查询用户角色和权限",
+        params = ["user_id: int"],
+        response_model = {
+            user_id = { type = "int", required = true },
+            username = { type = "str", required = true },
+            roles = { type = "list", required = true },
+            permissions = { type = "list", required = true }
+        }
+    }
+]
+
+[database.pool]
+echo = true
+pool_size = 20
+max_overflow = 10
+pool_recycle = 3600
+pool_pre_ping = true
+pool_timeout = 30
+
+[logging.minio]
+enabled = true
+endpoint = "localhost:9000"
+bucket = "chongming-logs"
+retention_days = 30

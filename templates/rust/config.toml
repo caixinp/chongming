@@ -2,6 +2,7 @@
 name = "rust-example"
 version = "0.1.0"
 description = "Rust implementation of example worker"
+config_version = "2.0"
 
 [nats]
 urls = [
@@ -17,47 +18,58 @@ queue_group = "calc-workers"
 router_prefix = "/calc"
 tags = ["calculator_rust"]
 heartbeat_interval = 15
+config_version = "2.0"
 
-[[registration.items]]
-subject = "calc.add"
-method = "GET"
-path = "/add"
-summary = "Add two numbers"
-docstring = "Add two numbers and return result with metadata"
-params = ["a: float", "b: float"]
-ttl = 30
-timeout = 2.0
-response_model = { result = ["float", "__required__"], operation = ["str", "add"], timestamp = ["float", 0.0] }
+# ── 默认值继承 ──────────────────────────────────────────
+defaults = { method = "GET", ttl = 30, timeout = 2.0, auth_required = true }
 
-[[registration.items]]
-subject = "calc.subtract"
-method = "GET"
-path = "/subtract"
-summary = "Subtract two numbers"
-docstring = "Subtract b from a and return result with metadata"
-params = ["a: float", "b: float"]
-ttl = 30
-timeout = 2.0
-response_model = { result = ["float", "__required__"], operation = ["str", "subtract"], timestamp = ["float", 0.0] }
-
-[[registration.items]]
-subject = "calc.multiply"
-method = "GET"
-path = "/multiply"
-summary = "Multiply two numbers"
-docstring = "Multiply two numbers and return result with metadata"
-params = ["a: float", "b: float"]
-ttl = 30
-timeout = 2.0
-response_model = { result = ["float", "__required__"], operation = ["str", "multiply"], timestamp = ["float", 0.0] }
-
-[[registration.items]]
-subject = "calc.divide"
-method = "GET"
-path = "/divide"
-summary = "Divide two numbers"
-docstring = "Divide a by b and return result with metadata"
-params = ["a: float", "b: float"]
-ttl = 30
-timeout = 2.0
-response_model = { result = ["float", "__required__"], operation = ["str", "divide"], timestamp = ["float", 0.0] }
+items = [
+    {
+        subject = "calc.add",
+        path = "/add",
+        summary = "Add two numbers",
+        docstring = "Add two numbers and return result with metadata",
+        params = ["a: float", "b: float"],
+        response_model = {
+            result = { type = "float", required = true },
+            operation = { type = "str", default = "add" },
+            timestamp = { type = "float", default = 0.0 }
+        }
+    },
+    {
+        subject = "calc.subtract",
+        path = "/subtract",
+        summary = "Subtract two numbers",
+        docstring = "Subtract b from a and return result with metadata",
+        params = ["a: float", "b: float"],
+        response_model = {
+            result = { type = "float", required = true },
+            operation = { type = "str", default = "subtract" },
+            timestamp = { type = "float", default = 0.0 }
+        }
+    },
+    {
+        subject = "calc.multiply",
+        path = "/multiply",
+        summary = "Multiply two numbers",
+        docstring = "Multiply two numbers and return result with metadata",
+        params = ["a: float", "b: float"],
+        response_model = {
+            result = { type = "float", required = true },
+            operation = { type = "str", default = "multiply" },
+            timestamp = { type = "float", default = 0.0 }
+        }
+    },
+    {
+        subject = "calc.divide",
+        path = "/divide",
+        summary = "Divide two numbers",
+        docstring = "Divide a by b and return result with metadata",
+        params = ["a: float", "b: float"],
+        response_model = {
+            result = { type = "float", required = true },
+            operation = { type = "str", default = "divide" },
+            timestamp = { type = "float", default = 0.0 }
+        }
+    }
+]

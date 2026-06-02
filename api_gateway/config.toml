@@ -12,6 +12,18 @@ urls = ["nats://localhost:4222", "nats://localhost:4223", "nats://localhost:4224
 [database]
 type = "pgsql"
 
+[database.master]
+host = "localhost"
+port = "5432"
+username = "myuser"
+password = "mypassword"
+
+[database.slave]
+host = "localhost"
+port = "5433"
+username = "myuser"
+password = "mypassword"
+
 [cleanup]
 interval = 10  # 过期路由清理检查间隔（秒），TTL 必须大于此值
 
@@ -33,5 +45,4 @@ whitelist_paths = [
     "/health",
     "/docs",
     "/openapi.json",
-    "/api/v1/auth/login"
 ]

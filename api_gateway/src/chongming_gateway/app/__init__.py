@@ -27,6 +27,7 @@ from .core.dynamic_route import DynamicRoute
 from .core.route_store import RouteKVStore
 from .core.route_registry import RouteRegistry
 from .core.registry_handler import RegistryHandler
+from .core.gateway_config_store import GatewayConfigStore
 from chongming_jwt import JWTAuth
 from chongming_config import load_gateway_config
 from chongming_cache import ChongmingCache
@@ -42,6 +43,7 @@ _registry: Optional[RouteRegistry] = None
 _lock_factory: Optional[LockFactory] = None
 _route_kv_store: Optional[RouteKVStore] = None
 _cleanup_interval: int = 10
+_gateway_config_store: Optional[GatewayConfigStore] = None
 
 
 def _setup_minio_logging():
@@ -52,7 +54,7 @@ def _setup_minio_logging():
             logger.info("MinIO logging is disabled in config")
             return
 
-        gateway_name = gateway_config["default"]["name"]
+        gateway_name = gateway_config["default"]["name"] # type: ignore
         setup_gateway_minio_logging(
             gateway_name=gateway_name,
             endpoint=minio_cfg.get("endpoint", "localhost:9000"),
@@ -78,29 +80,34 @@ async def lifespan(app: FastAPI):
 
     启动时:
     1. 初始化 MinIO 日志持久化
-    2. 连接 NATS 集群
-    3. 初始化分布式锁工厂
-    4. 创建 DynamicRoute 管理器
-    5. 读取清理配置
-    6. 初始化 KV 路由存储
-    7. 从 KV 恢复路由
-    8. 订阅 service.registry 消息
-    9. 启动后台路由过期清理任务
+    2. JWT 认证初始化
+    3. 连接 NATS 集群
+    4. 初始化分布式锁工厂
+    5. 创建 DynamicRoute 管理器
+    6. 读取清理配置
+    7. 初始化 KV 路由存储
+    8. RouteRegistry（内存 + 锁 + KV 同步）
+    9. 从 KV 恢复路由
+    10. RegistryHandler（消息分发）
+    11. 后台过期清理任务
+    12. 网关配置存入 NATS KV（供所有 worker 读取）
 
     关闭时:
     1. 取消清理任务
     2. 取消 NATS 订阅
-    3. 关闭缓存/锁资源
-    4. 关闭 NATS 连接
+    3. 关闭网关配置存储
+    4. 关闭缓存/锁资源
+    5. 关闭 KV 路由存储
+    6. 关闭 NATS 连接
     """
-    global _registry, _lock_factory, _route_kv_store, _cleanup_interval
+    global _registry, _lock_factory, _route_kv_store, _cleanup_interval, _gateway_config_store
 
     # ── 1. MinIO 日志持久化 ──────────────────────────────
     _setup_minio_logging()
 
     # ── 2. JWT 认证初始化 ────────────────────────────────
     jwt_config = gateway_config.get("jwt", {})
-    jwt_auth = JWTAuth(jwt_config)
+    jwt_auth = JWTAuth(jwt_config) # type: ignore
     app.state.jwt_auth = jwt_auth
     if jwt_auth.enabled:
         logger.info(
@@ -114,17 +121,17 @@ async def lifespan(app: FastAPI):
     nc = await get_nats_client()
     logger.info("FastAPI gateway connected to NATS cluster")
 
-    # ── 3. 分布式锁工厂 ──────────────────────────────────
+    # ── 4. 分布式锁工厂 ──────────────────────────────────
     cache = ChongmingCache(logger, bucket="_gw_locks_")
     await cache.__aenter__()
     _lock_factory = LockFactory(cache)
     logger.info("Lock factory initialized for distributed locks")
 
-    # ── 4. DynamicRoute 管理器 ────────────────────────────
+    # ── 5. DynamicRoute 管理器 ────────────────────────────
     dynamic_route_manager = DynamicRoute(app)
     app.state.dynamic_route_manager = dynamic_route_manager
 
-    # ── 5. 清理配置 ──────────────────────────────────────
+    # ── 6. 清理配置 ──────────────────────────────────────
     try:
         cleanup_config = gateway_config.get("cleanup", {})
         _cleanup_interval = int(cleanup_config.get("interval", 10))
@@ -135,13 +142,13 @@ async def lifespan(app: FastAPI):
             _cleanup_interval, e,
         )
 
-    # ── 6. KV 路由存储 ──────────────────────────────────
+    # ── 7. KV 路由存储 ──────────────────────────────────
     route_cache = ChongmingCache(logger, bucket="_gw_routes_")
     await route_cache.__aenter__()
     _route_kv_store = RouteKVStore(route_cache)
     logger.info("Route KV store initialized (bucket: _gw_routes_)")
 
-    # ── 7. RouteRegistry（内存 + 锁 + KV 同步） ─────────
+    # ── 8. RouteRegistry（内存 + 锁 + KV 同步） ─────────
     _registry = RouteRegistry(
         dynamic_route_manager=dynamic_route_manager,
         lock_factory=_lock_factory,
@@ -150,12 +157,12 @@ async def lifespan(app: FastAPI):
     )
     app.state.route_registry = _registry
 
-    # ── 8. 从 KV 恢复路由 ────────────────────────────────
+    # ── 9. 从 KV 恢复路由 ────────────────────────────────
     restored = await _registry.restore_from_kv()
     if restored > 0:
         logger.info("Gateway startup: restored %d routes from KV", restored)
 
-    # ── 9. RegistryHandler（消息分发） ───────────────────
+    # ── 10. RegistryHandler（消息分发） ───────────────────
     registry_handler = RegistryHandler(
         registry=_registry,
         dynamic_route_manager=dynamic_route_manager,
@@ -176,7 +183,7 @@ async def lifespan(app: FastAPI):
     sub = await nc.subscribe("service.registry", cb=on_registry_msg)
     logger.info("Subscribed to service.registry")
 
-    # ── 10. 后台过期清理任务 ─────────────────────────────
+    # ── 11. 后台过期清理任务 ─────────────────────────────
     async def cleanup_loop():
         while True:
             await asyncio.sleep(_cleanup_interval)
@@ -185,12 +192,18 @@ async def lifespan(app: FastAPI):
 
     cleanup_task = asyncio.create_task(cleanup_loop())
 
+    # ── 12. 网关配置存入 NATS KV（供所有 worker 读取） ──
+    _gateway_config_store = GatewayConfigStore(dict(gateway_config), logger)
+    await _gateway_config_store.start()
+
     # ── 应用运行中 ──────────────────────────────────────
     yield
 
     # ── 关闭清理 ─────────────────────────────────────────
     cleanup_task.cancel()
     await sub.unsubscribe()
+    if _gateway_config_store:
+        await _gateway_config_store.stop()
     if _lock_factory:
         await _lock_factory._cache.__aexit__(None, None, None)
     if _route_kv_store:
@@ -200,8 +213,8 @@ async def lifespan(app: FastAPI):
 
 
 # ── FastAPI 应用实例 ──────────────────────────────────────
-prefix = gateway_config["default"]["prefix"]
-name = gateway_config["default"]["name"]
+prefix = gateway_config["default"]["prefix"] # type: ignore
+name = gateway_config["default"]["name"] # type: ignore
 
 # OpenAPI Bearer token 安全方案（使 /docs 显示 Authorize 按钮）
 security_scheme = HTTPBearer(
@@ -267,3 +280,14 @@ async def debug_routes():
         "registry_lock_type": "chongming_lock.MutexLock (distributed)",
         "total_registered": _registry.count if _registry else 0,
     }
+
+
+# ── 调试端点：查看网关配置 ────────────────────────────────
+@app.get("/debug/config")
+async def debug_config():
+    """调试端点：查看 NATS KV 中存储的网关配置"""
+    from .core.gateway_config_store import GatewayConfigStore
+    gw_config = await GatewayConfigStore.get_config(logger)
+    if gw_config:
+        return {"status": "ok", "config": gw_config}
+    return {"status": "error", "message": "Gateway config not found in NATS KV"}

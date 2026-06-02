@@ -8,6 +8,7 @@ Worker Lifespan Framework
 - 消息分发与参数解析
 - 优雅关闭
 - **Worker 间通讯支持（publish / request）**
+- **生命周期钩子（on_start / on_stop）** — 允许 handler 模块注册启动/停止回调
 
 开发者只需专注于业务逻辑函数的实现。
 """
@@ -18,7 +19,7 @@ import inspect
 import logging
 import signal
 from contextvars import ContextVar
-from typing import Any, Callable, Optional, Union, Dict
+from typing import Any, Callable, Optional, Dict, List
 from dataclasses import dataclass
 from functools import wraps
 
@@ -125,6 +126,29 @@ class WorkerLifespan:
         @app.handler("user.query")
         async def query_user(user_id: str) -> dict:
             return {"user_id": user_id, "name": "Alice", "balance": 100.0}
+
+    ==========
+    生命周期钩子
+    ==========
+
+    handler 模块可以通过 ``on_start`` / ``on_stop`` 注册回调，
+    让 WorkerLifespan 在合适的时机自动调用它们：:
+
+        # 在 handler 模块中（如 app/handlers/auth.py）
+        from app.bootstrap import app
+
+        @app.on_start
+        async def my_startup():
+            # NATS 已就绪，可安全连接外部服务、启动监听等
+            pass
+
+        @app.on_stop
+        async def my_cleanup():
+            # 优雅关闭：释放连接、取消任务等
+            pass
+
+    回调注册发生在模块导入时（同步），而回调执行是在 ``app.run()``
+    的事件循环中（异步）。
     """
 
     def __init__(self, config_path: str = "config.toml"):
@@ -132,18 +156,86 @@ class WorkerLifespan:
         # 从配置读取心跳间隔，默认 15 秒
         self._heartbeat_interval = self.config.get("registration", {}).get("heartbeat_interval", 15)
         self._validate_ttl_config()
-        self.nc: Optional[Client] = None 
+        self.nc: Optional[Client] = None
         self._handlers: dict[str, HandlerInfo] = {}
         self._subscriptions: list[Any] = []
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._running = False
         self._shutdown_event = asyncio.Event()
+        # ── 生命周期钩子 ──────────────────────────────────────
+        self._startup_hooks: List[Callable[[], Any]] = []
+        self._shutdown_hooks: List[Callable[[], Any]] = []
+
+    # ----------------------------------------------------------------
+    # 生命周期钩子 API
+    # ----------------------------------------------------------------
+    @property
+    def on_start(self):
+        """装饰器/方法：注册 worker 启动后的回调
+
+        用法（装饰器风格，推荐）::
+
+            @app.on_start
+            async def setup_db_pool():
+                global db
+                db = await create_pool()
+
+        用法（方法调用风格）::
+
+            async def setup_db_pool():
+                global db
+                db = await create_pool()
+
+            app.on_start(setup_db_pool)
+
+        多个钩子按注册顺序依次执行。某个钩子失败时仅记录日志，
+        不会阻止后续钩子或 worker 启动。
+        """
+        def _wrapper(func: Callable) -> Callable:
+            self._startup_hooks.append(func)
+            return func
+        return _wrapper
+
+    @on_start.setter
+    def on_start(self, func: Callable) -> None:
+        self._startup_hooks.append(func)
+
+    @property
+    def on_stop(self):
+        """装饰器/方法：注册 worker 关闭前的清理回调
+
+        用法（装饰器风格，推荐）::
+
+            @app.on_stop
+            async def close_db_pool():
+                global db
+                await db.close()
+
+        用法（方法调用风格）::
+
+            async def close_db_pool():
+                global db
+                await db.close()
+
+            app.on_stop(close_db_pool)
+
+        多个钩子按**相反顺序**执行（后注册的先执行），
+        确保资源释放的顺序与创建顺序相反。
+        """
+        def _wrapper(func: Callable) -> Callable:
+            self._shutdown_hooks.append(func)
+            return func
+        return _wrapper
+
+    @on_stop.setter
+    def on_stop(self, func: Callable) -> None:
+        self._shutdown_hooks.append(func)
 
     # ----------------------------------------------------------------
     # 属性：暴露 NATS 连接供 worker 间通讯
     # ----------------------------------------------------------------
     @property
-    def nats_connection(self) -> Client: 
+    def nats_connection(self) -> Client:
         """获取 NATS 连接对象，用于自定义 NATS 操作"""
         if self.nc is None:
             raise RuntimeError("NATS connection is not established. Call start() first.")
@@ -303,13 +395,13 @@ class WorkerLifespan:
                 sig = inspect.signature(func)
                 func_params = list(sig.parameters.keys())
                 # 尝试查找配置中参数匹配的路由
-                for item in self.config["registration"]["items"]:
-                    if item["params"] == func_params:
-                        subject = item["subject"]
+                for item in self.config["registration"]["items"]: # type: ignore
+                    if item["params"] == func_params: # type: ignore
+                        subject = item["subject"] # type: ignore
                         break
                 if not subject:
                     # 回退：使用函数名作为 subject
-                    subject = f"{self.config['registration']['service']}.{func.__name__}"
+                    subject = f"{self.config['registration']['service']}.{func.__name__}" # type: ignore
 
             sig = inspect.signature(func)
             param_names = list(sig.parameters.keys())
@@ -509,14 +601,16 @@ class WorkerLifespan:
                     parsed = validated
 
                 # ── 构建 handler 参数 ──────────────────────────────
-                # 支持两种 handler 风格：
-                #   风格 A：async def add(a: float, b: float)          — 独立参数
+                # 支持多种 handler 风格：
+                #   风格 A：async def add(a: float, b: float)          — 独立参数，自动类型转换
                 #   风格 B：async def add(input: CalcAddInput)          — Pydantic 模型参数
                 #   风格 C：async def add(data: dict)                   — 原始 dict 参数
+                #   风格 D：async def add(data: Any)                    — 不限制类型，保留 JSON 原始类型
                 # 框架自动识别参数类型并选择合适的方式构造：
                 #   - 如果参数是 Pydantic BaseModel 子类 → 自动构造模型实例
                 #   - 如果参数是 dict → 直接传递整个 parsed dict
-                #   - 否则 → 按参数名从 parsed 中提取对应值
+                #   - 如果参数是 Any/object → 直接传递原始值，不做类型转换
+                #   - 否则 → 按参数名从 parsed 中提取对应值，并做类型转换
                 kwargs = {}
                 for k in params_names:
                     if k in _RESERVED_PARAMS:
@@ -528,6 +622,11 @@ class WorkerLifespan:
                         kwargs[k] = target_type(**parsed)
                     elif target_type is dict:
                         # 风格 C：参数类型是 dict → 直接传递整个 parsed dict
+                        kwargs[k] = parsed
+                    elif target_type is Any or target_type is object:
+                        # 风格 D：参数类型是 Any/object → 不限制类型，直接传递原始值
+                        # 不做任何类型转换，保留 JSON 原始类型（dict/list/str/int/float/bool/None）
+                        # 直接传递整个 parsed dict，与风格 C (dict) 行为一致
                         kwargs[k] = parsed
                     else:
                         # 风格 A：按参数名从 parsed 中提取值，并做类型转换
@@ -582,12 +681,12 @@ class WorkerLifespan:
         """定期发送心跳到网关，同时批量续期所有路由以确保 gateway 重启后路由快速恢复"""
         heartbeat_per_subject = {
             "type": "heartbeat",
-            "service": self.config["registration"]["service"],
+            "service": self.config["registration"]["service"], # type: ignore
         }
         # 批量心跳携带完整的注册信息 items，以便网关在路由丢失时自动重建路由
-        heartbeat_batch = dict(self.config["registration"])
+        heartbeat_batch = dict(self.config["registration"]) # type: ignore
         heartbeat_batch["type"] = "heartbeat"
-        heartbeat_batch["subjects"] = [item["subject"] for item in self.config["registration"]["items"]]
+        heartbeat_batch["subjects"] = [item["subject"] for item in self.config["registration"]["items"]] # type: ignore
         heartbeat_count = 0
         # 批量续期周期：每 N 次心跳后批量续期一次，确保 gateway 重启后路由能快速恢复
         reregister_cycles = 3
@@ -606,8 +705,8 @@ class WorkerLifespan:
                     logger.info("Batch heartbeat sent (renews all routes, every %ds)", reregister_cycles * self._heartbeat_interval)
                 else:
                     # 逐个发送每个 subject 的心跳
-                    for item in self.config["registration"]["items"]:
-                        heartbeat_per_subject["subject"] = item["subject"]
+                    for item in self.config["registration"]["items"]: # type: ignore
+                        heartbeat_per_subject["subject"] = item["subject"] # type: ignore
                         await self.nc.publish( # type: ignore
                             "service.registry",
                             json.dumps(heartbeat_per_subject).encode()
@@ -620,13 +719,13 @@ class WorkerLifespan:
     # 生命周期：启动
     # ----------------------------------------------------------------
     async def start(self) -> None:
-        """启动 worker：连接 NATS、注册、订阅、开始心跳"""
+        """启动 worker：连接 NATS、执行启动钩子、注册、订阅、开始心跳"""
         if self._running:
             return
         self._running = True
 
         # 1. 连接 NATS
-        urls = self.config["nats"]["urls"]
+        urls = self.config["nats"]["urls"] # type: ignore
         logger.info("Connecting to NATS: %s", urls)
         self.nc = await nats.connect(
             urls,
@@ -637,16 +736,35 @@ class WorkerLifespan:
         )
         logger.info("Connected to NATS")
 
-        # 2. 注册到网关
-        registration = self.config["registration"]
+        # 2. 执行启动钩子（NATS 已就绪，可以安全使用网络连接）
+        for hook in self._startup_hooks:
+            try:
+                result = hook()
+                if hasattr(result, '__await__'):
+                    await result
+            except Exception as e:
+                logger.error("Startup hook '%s' failed: %s", getattr(hook, '__name__', hook), e)
+
+        # 3. 注册到网关（携带 config_version 用于版本兼容性检查）
+        registration = dict(self.config["registration"]) # type: ignore
+        # 将 worker 级别的 config_version 合并到 registration 消息中
+        worker_cfg = self.config.get("worker", {})
+        if "config_version" not in registration:
+            registration["config_version"] = worker_cfg.get("config_version", "")
+        # 同时传递 worker name 辅助诊断
+        registration["name"] = worker_cfg.get("name", registration.get("service", "unknown"))
+
         await self.nc.publish(
             "service.registry",
             json.dumps(registration).encode()
         )
-        logger.info("Registered with gateway: %s", registration['service'])
+        logger.info(
+            "Registered with gateway: %s (config_version=%s)",
+            registration['service'], registration.get("config_version", "none"),
+        )
 
-        # 3. 订阅处理的主题（使用 Queue Group 实现负载均衡）
-        queue_group = self.config["registration"].get("queue_group", self.config["registration"]["service"])
+        # 4. 订阅处理的主题（使用 Queue Group 实现负载均衡）
+        queue_group = self.config["registration"].get("queue_group", self.config["registration"]["service"]) # type: ignore
         for subject in self._handlers:
             sub = await self.nc.subscribe(subject, queue=queue_group, cb=self._dispatch_message)
             self._subscriptions.append(sub)
@@ -654,22 +772,22 @@ class WorkerLifespan:
 
         # 如果没有任何 handler 注册，从配置自动注册
         if not self._handlers:
-            for item in self.config["registration"]["items"]:
+            for item in self.config["registration"]["items"]: # type: ignore
                 sub = await self.nc.subscribe(
-                    item["subject"],
+                    item["subject"], # type: ignore
                     queue=queue_group,
                     cb=self._dispatch_auto_from_config
                 )
                 self._subscriptions.append(sub)
-                logger.info("Auto-subscribed to: %s (queue_group=%s)", item['subject'], queue_group)
-                logger.warning("No handler registered for '%s'", item['subject'])
+                logger.info("Auto-subscribed to: %s (queue_group=%s)", item['subject'], queue_group) # type: ignore
+                logger.warning("No handler registered for '%s'", item['subject']) # type: ignore
 
-        # 4. 开始心跳
+        # 5. 开始心跳
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
-        logger.info("Worker '%s' is running...", self.config['worker']['name'])
+        logger.info("Worker '%s' is running...", self.config['worker']['name']) # type: ignore
         logger.info("Heartbeat interval: %ds", self._heartbeat_interval)
-        logger.info("Registered subjects: %s", list(self._handlers.keys()) or [i['subject'] for i in self.config['registration']['items']])
+        logger.info("Registered subjects: %s", list(self._handlers.keys()) or [i['subject'] for i in self.config['registration']['items']]) # type: ignore
 
     async def _dispatch_auto_from_config(self, msg: Msg) -> None:
         """兜底：当没有注册 handler 时，打印警告并返回错误"""
@@ -684,7 +802,16 @@ class WorkerLifespan:
     # 生命周期：优雅关闭
     # ----------------------------------------------------------------
     async def shutdown(self) -> None:
-        """优雅关闭 worker"""
+        """优雅关闭 worker
+
+        关闭顺序（保证 NATS 连接在 shutdown hooks 执行完之前保持可用）：
+          1. 取消心跳
+          2. 取消 NATS 订阅（不再接收新消息）
+          3. 发送注销消息到 gateway
+          4. 执行关闭钩子（如取消缓存监听、关闭数据库连接等）
+             → 此时 NATS 连接仍然活跃，shutdown hooks 可安全使用
+          5. 关闭 NATS 连接
+        """
         if not self._running:
             return
         self._running = False
@@ -698,7 +825,7 @@ class WorkerLifespan:
             except asyncio.CancelledError:
                 pass
 
-        # 取消订阅
+        # 取消订阅（不再接收新消息）
         for sub in self._subscriptions:
             try:
                 await sub.unsubscribe()
@@ -710,7 +837,7 @@ class WorkerLifespan:
         try:
             deregister_msg = {
                 "type": "deregister",
-                "service": self.config["registration"]["service"],
+                "service": self.config["registration"]["service"], # type: ignore
             }
             await self.nc.publish( # type: ignore
                 "service.registry",
@@ -720,7 +847,17 @@ class WorkerLifespan:
         except Exception as e:
             logger.error("Deregistration failed: %s", e)
 
-        # 关闭 NATS 连接
+        # 执行关闭钩子（后注册的先执行）
+        # NATS 连接此时仍然活跃，shutdown hooks 可以安全地取消其依赖 NATS 的任务
+        for hook in reversed(self._shutdown_hooks):
+            try:
+                result = hook()
+                if hasattr(result, '__await__'):
+                    await result
+            except Exception as e:
+                logger.error("Shutdown hook '%s' failed: %s", getattr(hook, '__name__', hook), e)
+
+        # 最后关闭 NATS 连接
         if self.nc and self.nc.is_connected:
             await self.nc.drain()
             logger.info("NATS connection drained")
@@ -740,7 +877,7 @@ class WorkerLifespan:
     async def _on_reconnected(self) -> None:
         logger.info("Reconnected to NATS")
         # 重新注册
-        registration = self.config["registration"]
+        registration = self.config["registration"] # type: ignore
         await self.nc.publish( # type: ignore
             "service.registry",
             json.dumps(registration).encode()

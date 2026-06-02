@@ -12,6 +12,18 @@ urls = ["nats://nats-1:4222", "nats://nats-2:4222", "nats://nats-3:4222"]
 [database]
 type = "pgsql"
 
+[database.master]
+host = "pg-master"
+port = "5432"
+username = "myuser"
+password = "mypassword"
+
+[database.slave]
+host = "pg-slave"
+port = "5433"
+username = "myuser"
+password = "mypassword"
+
 [cleanup]
 interval = 10
 

@@ -4,6 +4,11 @@ Pydantic Model Generator
 
 从 config.toml 中定义的 handler 元数据，自动生成对应的 Pydantic 输入/输出模型类。
 
+支持：
+- 新旧两种 response_model 语法
+- 扩展参数类型（list[int], datetime 等）
+- 嵌套对象模型
+
 使用方法::
 
     # 在 worker 根目录执行
@@ -12,32 +17,21 @@ Pydantic Model Generator
     # 或在代码中直接调用
     from chongming_worker.model_gen import generate_models
     generate_models("workers/example")
-
-模块会读取 config.toml 中 registration.items 的配置，
-为每个 subject 生成 {Subject}Input 和 {Subject}Output 两个 Pydantic 模型类，
-存放于 models/__init__.py 文件中。
 """
 
-import ast
 import os
 import re
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from chongming_config import load_config
+from chongming_config import (
+    get_field_def_type,
+    get_field_def_required,
+    get_field_def_default,
+    get_field_def_fields,
+)
 
-# ── 类型映射表 ─────────────────────────────────────────────────────
-# config.toml 中的类型名 → Python/Pydantic 类型
-_TYPE_MAP: dict[str, str] = {
-    "str": "str",
-    "int": "int",
-    "float": "float",
-    "bool": "bool",
-    "list": "list",
-    "object": "dict",
-    "any": "Any",
-}
-
-# Python 关键字/内置类型保留字，需要加后缀避免冲突
+# ── Python 关键字/内置类型保留字，需要加后缀避免冲突 ────────────
 _PYTHON_RESERVED = {
     "and", "as", "assert", "async", "await", "break", "class", "continue",
     "def", "del", "elif", "else", "except", "finally", "for", "from",
@@ -46,6 +40,22 @@ _PYTHON_RESERVED = {
     "True", "False", "None", "type", "list", "dict", "str", "int",
     "float", "bool", "object", "input", "output", "model",
 }
+
+# 类型到 Python 类型别名的映射
+_TYPE_ALIAS_MAP: Dict[str, str] = {
+    "str": "str",
+    "int": "int",
+    "float": "float",
+    "bool": "bool",
+    "list": "list",
+    "dict": "dict",
+    "object": "dict",
+    "any": "Any",
+    "datetime": "datetime",
+    "Decimal": "Decimal",
+}
+
+# ── 工具函数 ─────────────────────────────────────────────────────
 
 
 def _sanitize_name(name: str) -> str:
@@ -62,149 +72,76 @@ def _sanitize_name(name: str) -> str:
 
 def _to_pascal_case(name: str) -> str:
     """将 snake_case 或 kebab-case 转为 PascalCase"""
-    # 先按分隔符拆分
     parts = re.split(r'[-_.\s]', name)
     return ''.join(part.capitalize() for part in parts if part)
 
 
-def _toml_type_to_python(toml_type: str) -> str:
-    """config.toml 中的类型描述 → Python 类型注解字符串"""
-    toml_type = toml_type.strip().lower()
-    # 处理 Optional[type]: 如果类型以 ? 结尾
-    is_optional = toml_type.endswith("?")
-    if is_optional:
-        toml_type = toml_type.rstrip("?").strip()
+def _resolve_type(type_str: str) -> str:
+    """将类型字符串解析为 Python 类型注释
 
-    py_type = _TYPE_MAP.get(toml_type, toml_type)
-
-    if is_optional:
-        return f"Optional[{py_type}]"
-    return py_type
-
-
-def _parse_field(def_tuple: list) -> tuple[str, str, Any, Optional[dict]]:
-    """解析 config.toml 中的一个字段定义
-
-    字段定义格式::
-        field_name = ["type", "default_or___required__"]
-        field_name = ["type", "default_or___required__", {nested_fields}]
-
-    :return: (field_name, type_annotation, default_value, nested_dict_or_None)
+    >>> _resolve_type("list[str]")
+    "List[str]"
+    >>> _resolve_type("Optional[int]")
+    "Optional[int]"
+    >>> _resolve_type("datetime")
+    "datetime"
     """
-    field_name = def_tuple[0]
-    toml_type = def_tuple[1]
-    default_raw = def_tuple[2] if len(def_tuple) > 2 else "__required__"
-    nested = def_tuple[3] if len(def_tuple) > 3 else None
+    type_str = type_str.strip()
 
-    return field_name, toml_type, default_raw, nested
+    # 简单类型
+    if type_str.lower() in _TYPE_ALIAS_MAP:
+        return _TYPE_ALIAS_MAP[type_str.lower()]
+
+    # 泛型: list[X], dict[K,V], Optional[X], List[X], Dict[K,V]
+    m = re.match(r'^(?P<base>list|List|dict|Dict|Optional)\[(?P<inner>.+)\]$', type_str, re.IGNORECASE)
+    if m:
+        base = m.group("base")
+        # 统一首字母大写 (list -> List, dict -> Dict)
+        base_normalized = base[0].upper() + base[1:].lower() if base.lower() != "optional" else "Optional"
+        inner = m.group("inner").strip()
+        resolved_inner = _resolve_type(inner)
+        return f"{base_normalized}[{resolved_inner}]"
+
+    return type_str
 
 
-def _generate_model_code(
-    model_name: str,
-    fields: list,
-    is_input: bool = False,
-    indent: int = 4,
-) -> str:
-    """生成单个 Pydantic 模型的源代码
+def _format_default_value(raw: Any, type_str: str) -> str:
+    """将默认值格式化为 Python 字面量
 
-    :param model_name: 类名（PascalCase）
-    :param fields: 字段定义列表，每项为 [name, type, default, nested?]
-    :param is_input: 是否为输入模型（输入模型直接使用 params 列表，没有默认值）
-    :param indent: 缩进空格数
-    :return: Python 源代码字符串
+    支持：
+    - 基本类型 int/float/str/bool
+    - 复杂类型 list/dict
     """
-    lines: list[str] = []
-    i_str = " " * indent
+    if raw is None:
+        return "None"
 
-    lines.append(f"class {model_name}(BaseModel):")
-    lines.append(f"{i_str}\"\"\"{model_name} - 自动生成{'输入' if is_input else '输出'}模型\"\"\"")
+    if isinstance(raw, bool):
+        return str(raw).lower()
 
-    if not fields:
-        lines.append(f"{i_str}pass")
-        lines.append("")
-        return "\n".join(lines)
+    if isinstance(raw, int):
+        return str(raw)
 
-    for field_def in fields:
-        if is_input:
-            # 输入模型：直接使用类型，无默认值
-            field_name, toml_type = field_def[0], field_def[1]
-            py_type = _toml_type_to_python(toml_type)
-            cleaned_name = _sanitize_name(field_name)
-            lines.append(f"{i_str}{cleaned_name}: {py_type}")
-        else:
-            field_name, toml_type, default_raw, nested = _parse_field(field_def)
-            cleaned_name = _sanitize_name(field_name)
+    if isinstance(raw, float):
+        return str(raw)
 
-            if isinstance(nested, dict):
-                # 嵌套对象 → 生成子模型
-                nested_name = _to_pascal_case(field_name)
-                nested_fields = []
-                for nest_key, nest_val in nested.items():
-                    if isinstance(nest_val, list) and len(nest_val) >= 2:
-                        nested_fields.append([nest_key, *nest_val])
-                    else:
-                        nested_fields.append([nest_key, "any", nest_val])
+    if isinstance(raw, str):
+        # 如果是 __required__ 标记，不应在此出现
+        if raw == "__required__":
+            return "None"
+        return repr(raw)
 
-                lines.append(f"{i_str}{cleaned_name}: {nested_name}")
-                lines.append("")
-                # 递归生成嵌套模型（在当前行之前插入）
-                nested_code = _generate_model_code(
-                    nested_name, nested_fields, indent=indent
-                )
-                # 我们会在返回前处理嵌套模型的插入位置
-                continue
+    if isinstance(raw, list):
+        # list 默认值：使用 Field(default_factory=list)
+        return "None"  # 用 None 配合 Field 设置 default_factory
 
-            py_type = _toml_type_to_python(toml_type)
+    if isinstance(raw, dict):
+        # dict 默认值：使用 Field(default_factory=dict)
+        return "None"
 
-            if default_raw == "__required__":
-                lines.append(f"{i_str}{cleaned_name}: {py_type}")
-            else:
-                # 处理默认值
-                py_default = _format_default_value(default_raw, toml_type)
-                lines.append(f"{i_str}{cleaned_name}: {py_type} = {py_default}")
-
-    lines.append("")
-    return "\n".join(lines)
+    return repr(str(raw))
 
 
-def _format_default_value(raw: str, toml_type: str) -> str:
-    """将 config.toml 中的默认值格式化为 Python 字面量"""
-    toml_type = toml_type.strip().lower()
-
-    if toml_type in ("str",):
-        return repr(str(raw))
-    elif toml_type in ("int",):
-        try:
-            return str(int(raw))
-        except (ValueError, TypeError):
-            return repr(str(raw))
-    elif toml_type in ("float",):
-        try:
-            return str(float(raw))
-        except (ValueError, TypeError):
-            return repr(str(raw))
-    elif toml_type in ("bool",):
-        if isinstance(raw, str):
-            return "True" if raw.lower() in ("true", "1", "yes") else "False"
-        return str(bool(raw)).lower()
-    elif toml_type in ("list",):
-        return repr(raw) if isinstance(raw, list) else "[]"
-    elif toml_type in ("object", "any"):
-        return repr(raw) if isinstance(raw, dict) else "{}"
-    else:
-        return repr(str(raw))
-
-
-def _generate_imports(has_nested: bool = False) -> str:
-    """生成 import 部分"""
-    imports = [
-        "from datetime import datetime",
-        "from typing import Any, Optional, List, Dict",
-        "",
-        "from pydantic import BaseModel, Field, field_validator",
-        "",
-    ]
-    return "\n".join(imports)
+# ── 核心生成函数 ─────────────────────────────────────────────────
 
 
 def generate_models(worker_dir: str, shared_only: bool = False) -> str:
@@ -232,15 +169,15 @@ def generate_models(worker_dir: str, shared_only: bool = False) -> str:
         if not items:
             return "# 没有标记为 shared=true 的 handler，未生成模型\n"
 
-    lines: list[str] = []
-    has_nested = False
+    lines: List[str] = []
+    all_nested_models: Dict[str, List] = {}
 
     # 文件头
     lines.append('"""')
-    lines.append(f"Pydantic Models - 自动生成")
-    lines.append(f"")
-    lines.append(f"生成自: config.toml")
-    lines.append(f"指令: chongming gen-models")
+    lines.append("Pydantic Models - 自动生成")
+    lines.append("")
+    lines.append("生成自: config.toml")
+    lines.append("指令: chongming gen-models")
     lines.append('"""')
     lines.append("")
 
@@ -251,9 +188,6 @@ def generate_models(worker_dir: str, shared_only: bool = False) -> str:
     lines.append("from pydantic import BaseModel, Field")
     lines.append("")
 
-    # 收集所有需要生成的模型
-    all_nested_models: dict[str, list] = {}  # name -> fields
-
     for item in items:
         subject = item.get("subject", "")
         if not subject:
@@ -263,115 +197,175 @@ def generate_models(worker_dir: str, shared_only: bool = False) -> str:
 
         # ── 输入模型（基于 params） ────────────────────────
         params = item.get("params", [])
-        input_fields = []
-        for param in params:
-            # params 格式: "a: float", "user_id: str"
-            parts = param.split(":")
-            p_name = parts[0].strip()
-            p_type = parts[1].strip() if len(parts) > 1 else "str"
-            input_fields.append([p_name, p_type])
+        input_fields = _extract_input_fields(params)
 
         input_model_name = f"{subject_pascal}Input"
         lines.append(f"class {input_model_name}(BaseModel):")
         lines.append(f"    \"\"\"{subject.upper()} 请求参数模型\"\"\"")
-        for field_def in input_fields:
-            f_name, f_type = _sanitize_name(field_def[0]), _toml_type_to_python(field_def[1])
-            lines.append(f"    {f_name}: {f_type}")
+        if input_fields:
+            for f_name, f_type, f_default in input_fields:
+                cleaned_name = _sanitize_name(f_name)
+                py_type = _resolve_type(f_type)
+                if f_default is not None and f_default != "__required__":
+                    # 有默认值
+                    default_str = _format_default_value(f_default, f_type)
+                    lines.append(f"    {cleaned_name}: {py_type} = {default_str}")
+                else:
+                    lines.append(f"    {cleaned_name}: {py_type}")
+        else:
+            lines.append("    pass")
         lines.append("")
         lines.append("")
 
         # ── 输出模型（基于 response_model） ────────────────
         response_model = item.get("response_model", {})
+        fmt = item.get("response_model_format", "legacy")
         output_fields = []
-        nested_models: dict[str, list] = {}
 
-        for r_key, r_val in response_model.items():
-            if isinstance(r_val, list) and len(r_val) >= 2:
-                r_type = r_val[0]
-                r_default = r_val[1] if len(r_val) > 1 else "__required__"
-                r_nested = r_val[2] if len(r_val) > 2 else None
+        if isinstance(response_model, dict) and response_model:
+            for field_name, field_def in response_model.items():
+                if not isinstance(field_def, dict):
+                    continue
 
-                if isinstance(r_nested, dict):
-                    # 有嵌套对象
-                    nested_name = _to_pascal_case(r_key)
-                    nested_fields = []
-                    for nk, nv in r_nested.items():
-                        if isinstance(nv, list) and len(nv) >= 2:
-                            nested_fields.append([nk, *nv])
-                        else:
-                            nested_fields.append([nk, "any", nv])
-                    nested_models[nested_name] = nested_fields
-                    output_fields.append([r_key, "object", "__required__", nested_name])
-                    has_nested = True
+                py_type_str = get_field_def_type(field_def)
+                is_required = get_field_def_required(field_def)
+                default_val = get_field_def_default(field_def)
+                nested_fields = get_field_def_fields(field_def)
+
+                if nested_fields and isinstance(nested_fields, dict):
+                    # 嵌套对象 → 生成子模型
+                    nested_name = _to_pascal_case(field_name)
+                    nested_field_list = _extract_field_from_normalized(nested_fields)
+                    all_nested_models[nested_name] = nested_field_list
+                    output_fields.append((field_name, nested_name, is_required, default_val))
                 else:
-                    output_fields.append([r_key, r_type, r_default])
-            else:
-                output_fields.append([r_key, "any", r_val])
+                    output_fields.append((field_name, py_type_str, is_required, default_val))
 
         output_model_name = f"{subject_pascal}Output"
-
-        # 先生成嵌套模型
-        for nested_name, nested_fields in nested_models.items():
-            all_nested_models[nested_name] = nested_fields
-
-        # 生成输出模型
         lines.append(f"class {output_model_name}(BaseModel):")
         lines.append(f"    \"\"\"{subject.upper()} 响应结果模型\"\"\"")
-        for field_def in output_fields:
-            if len(field_def) == 4:
-                # 嵌套对象
-                f_name = _sanitize_name(field_def[0])
-                f_type = field_def[3]
-                f_default = field_def[2]
-                if f_default == "__required__":
-                    lines.append(f"    {f_name}: {f_type}")
-                else:
-                    lines.append(f"    {f_name}: {f_type} = {_format_default_value(f_default, 'object')}")
-            elif len(field_def) >= 2:
-                f_name = _sanitize_name(field_def[0])
-                f_type = _toml_type_to_python(field_def[1])
-                if len(field_def) >= 3 and field_def[2] != "__required__":
-                    f_default = field_def[2]
-                    py_default = _format_default_value(f_default, field_def[1])
-                    lines.append(f"    {f_name}: {f_type} = {py_default}")
-                else:
-                    lines.append(f"    {f_name}: {f_type}")
-        lines.append("")
-        lines.append("")
+        if output_fields:
+            for f_name, f_type, is_required, default_val in output_fields:
+                cleaned_name = _sanitize_name(f_name)
+                py_type = _resolve_type(f_type)
 
-    # 在 __init__.py 的开头插入所有嵌套模型
-    if all_nested_models:
-        # 找到第一个 class 定义的位置，在其之前插入嵌套模型
-        nested_section = "\n# ── 内嵌对象模型 ────────────────────────────────────\n\n"
-        for n_name, n_fields in all_nested_models.items():
-            nested_section += f"class {n_name}(BaseModel):\n"
-            nested_section += f'    """{n_name}"""\n'
-            if not n_fields:
-                nested_section += "    pass\n\n"
-            else:
-                for nf in n_fields:
-                    nf_name = _sanitize_name(nf[0])
-                    nf_type = _toml_type_to_python(nf[1] if len(nf) > 1 else "any")
-                    nf_default = nf[2] if len(nf) > 2 else "__required__"
-                    if nf_default == "__required__":
-                        nested_section += f"    {nf_name}: {nf_type}\n"
+                if is_required:
+                    # 必填字段
+                    if py_type in ("list", "List[Any]"):
+                        lines.append(f"    {cleaned_name}: {py_type} = Field(default_factory=list)")
+                    elif py_type in ("dict", "Dict[str, Any]"):
+                        lines.append(f"    {cleaned_name}: {py_type} = Field(default_factory=dict)")
                     else:
-                        nested_section += f"    {nf_name}: {nf_type} = {_format_default_value(nf_default, nf[1] if len(nf) > 1 else 'any')}\n"
-                nested_section += "\n"
+                        lines.append(f"    {cleaned_name}: {py_type}")
+                elif default_val is not None:
+                    # 有默认值
+                    default_str = _format_default_value(default_val, f_type)
+                    if py_type in ("list", "List[Any]") and default_val is None:
+                        lines.append(f"    {cleaned_name}: {py_type} = Field(default_factory=list)")
+                    elif py_type in ("dict", "Dict[str, Any]") and default_val is None:
+                        lines.append(f"    {cleaned_name}: {py_type} = Field(default_factory=dict)")
+                    else:
+                        lines.append(f"    {cleaned_name}: {py_type} = {default_str}")
+                else:
+                    # 非必填无默认值
+                    lines.append(f"    {cleaned_name}: {py_type} = None")
+        else:
+            lines.append("    pass")
+        lines.append("")
+        lines.append("")
 
-        # 在文件头部插入嵌套模型（在第一个类之前）
-        idx = 0
+    # 在文件头部插入所有嵌套模型（在第一个 class 之前）
+    if all_nested_models:
+        nested_lines = ["\n# ── 内嵌对象模型 ────────────────────────────────────\n"]
+        for n_name, n_fields in all_nested_models.items():
+            nested_lines.append(f"class {n_name}(BaseModel):")
+            nested_lines.append(f'    """{_sanitize_name(n_name)}"""')
+            if n_fields:
+                for nf_name, nf_type, nf_required, nf_default in n_fields:
+                    cleaned_name = _sanitize_name(nf_name)
+                    py_type = _resolve_type(nf_type)
+                    if nf_required:
+                        if "List" in py_type or py_type == "list":
+                            nested_lines.append(f"    {cleaned_name}: {py_type} = Field(default_factory=list)")
+                        elif "Dict" in py_type or py_type == "dict":
+                            nested_lines.append(f"    {cleaned_name}: {py_type} = Field(default_factory=dict)")
+                        else:
+                            nested_lines.append(f"    {cleaned_name}: {py_type}")
+                    elif nf_default is not None:
+                        default_str = _format_default_value(nf_default, nf_type)
+                        nested_lines.append(f"    {cleaned_name}: {py_type} = {default_str}")
+                    else:
+                        nested_lines.append(f"    {cleaned_name}: {py_type} = None")
+            else:
+                nested_lines.append("    pass")
+            nested_lines.append("")
+
+        # 找到第一个类定义的位置
+        insert_idx = None
         for i, line in enumerate(lines):
-            if line.startswith("class "):
-                idx = i
+            if line.startswith("class ") and "Input" not in line and "Output" not in line:
+                # 跳过 Input 和 Output class，只找第一个自定义模型
+                pass
+            if line.startswith("class ") and insert_idx is None:
+                insert_idx = i
                 break
-        # 插入在第一个 class 之前
-        insert_lines = nested_section.strip().split("\n")
-        for il in reversed(insert_lines):
-            lines.insert(idx, il)
-        lines.insert(idx, "")
+        if insert_idx is None:
+            insert_idx = len(lines)
+
+        # 在第一个模型之前插入嵌套模型
+        for nl in reversed(nested_lines):
+            lines.insert(insert_idx, nl)
 
     return "\n".join(lines)
+
+
+def _extract_input_fields(params: Any) -> List[tuple]:
+    """从 params 提取输入字段
+
+    支持：
+    - 旧格式（字符串列表）: ["a: float", "b: float"]
+    - 新格式（已解析的 dict 列表）: [{"name": "a", "raw_type": "float", "py_type": "float"}]
+    """
+    fields = []
+    if not params:
+        return fields
+
+    for param in params:
+        if isinstance(param, str):
+            # 旧格式: "a: float"
+            parts = param.split(":")
+            p_name = parts[0].strip()
+            p_type = parts[1].strip() if len(parts) > 1 else "str"
+            fields.append((p_name, p_type, None))
+        elif isinstance(param, dict):
+            # 新格式: {"name": "a", "raw_type": "float", ...}
+            p_name = param.get("name", "unknown")
+            p_type = param.get("raw_type", "str")
+            p_default = param.get("default")
+            fields.append((p_name, p_type, p_default))
+
+    return fields
+
+
+def _extract_field_from_normalized(normalized_fields: Dict[str, Any]) -> List[tuple]:
+    """从归一化的嵌套字段字典提取字段列表
+
+    输入: {"user_id": {"type": "str", "required": true, "default": None, ...}, ...}
+    输出: [("user_id", "str", True, None), ...]
+    """
+    fields = []
+    for f_name, f_def in normalized_fields.items():
+        if isinstance(f_def, dict):
+            f_type = get_field_def_type(f_def)
+            f_required = get_field_def_required(f_def)
+            f_default = get_field_def_default(f_def)
+            fields.append((f_name, f_type, f_required, f_default))
+        else:
+            fields.append((f_name, "any", False, f_def))
+    return fields
+
+
+# ── 磁盘写入函数 ─────────────────────────────────────────────────
 
 
 def write_models_to_disk(
@@ -396,13 +390,11 @@ def write_models_to_disk(
         return code
 
     if target_path:
-        # 写入自定义路径（如 public/__init__.py）
         target_path = os.path.abspath(target_path)
         os.makedirs(os.path.dirname(target_path), exist_ok=True)
         with open(target_path, "w", encoding="utf-8") as f:
             f.write(code)
     else:
-        # 默认写入 models/__init__.py
         models_dir = os.path.join(worker_dir, "models")
         os.makedirs(models_dir, exist_ok=True)
         init_file = os.path.join(models_dir, "__init__.py")
@@ -412,14 +404,17 @@ def write_models_to_disk(
     return code
 
 
-def get_worker_names() -> list[str]:
+def get_worker_names() -> List[str]:
     """获取所有可用的 worker 名称列表"""
-    project_root = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..")
+    project_root = os.path.join(
+        os.path.dirname(__file__), "..", "..", "..", "..", ".."
+    )
     workers_dir = os.path.join(project_root, "workers")
     if not os.path.exists(workers_dir):
         return []
     return [
-        d for d in os.listdir(workers_dir)
+        d
+        for d in os.listdir(workers_dir)
         if os.path.isdir(os.path.join(workers_dir, d))
         and os.path.exists(os.path.join(workers_dir, d, "config.toml"))
     ]
