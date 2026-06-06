@@ -16,7 +16,7 @@ from chongming_permission import init_permission_cache, register_permission_load
 from .listeners import listen_gateway_config_changes, stop_listener
 from .database_models import *
 from .utils.snowflake import snowflake_generator
-from .utils.rbac import seed_default_rbac, subscribe_routes_permission_sync
+from .utils.rbac import seed_default_rbac, seed_default_admin_user, subscribe_routes_permission_sync
 
 
 logger = logging.getLogger("chongming.worker.user_auth")
@@ -111,6 +111,7 @@ async def on_start():
         await routes_kv_cache.connect()
         async for session in get_db_session_master():
             await seed_default_rbac(session, routes_kv_cache)
+            await seed_default_admin_user(session)
     except Exception as e:
         logger.warning("RBAC seed data initialization skipped: %s", e)
 

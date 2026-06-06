@@ -45,4 +45,6 @@ whitelist_paths = [
     "/health",
     "/docs",
     "/openapi.json",
+    # "/api/v1/user_auth/user/login",
+    # "/api/v1/user_auth/user/register",
 ]

@@ -163,6 +163,7 @@ dependencies = [
     { name = "alembic" },
     { name = "chongming-worker" },
     { name = "minio" },
+    { name = "nats-py" },
     { name = "psycopg2-binary" },
     { name = "sqlmodel" },
 ]
@@ -172,6 +173,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.18.4" },
     { name = "chongming-worker", directory = "utils/python/worker" },
     { name = "minio", specifier = ">=7.2.20" },
+    { name = "nats-py" },
     { name = "psycopg2-binary", specifier = ">=2.9.12" },
     { name = "sqlmodel", specifier = ">=0.0.38" },
 ]

@@ -71,8 +71,8 @@ async def list_permissions(input: PermissionListInput) -> PermissionListOutput:
             count_base = count_base.where(resource_filter)
 
         # 总数
-        total_result = await session.execute(count_base)
-        total = total_result.scalar() or 0
+        total_result = await session.exec(count_base)
+        total = total_result.one_or_none() or 0
 
         # 列表
         stmt = base_stmt.offset(input.offset).limit(input.limit)

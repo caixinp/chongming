@@ -23,12 +23,9 @@ from app.utils.snowflake import snowflake_generator
 from ..listeners import get_jwt_auth, get_db_session_master, get_db_session_slave
 
 from models import (
-    UserAuthInput,
-    UserAuthOutput,
-    UserLoginInput,
-    UserLoginOutput,
-    UserRegisterInput,
-    UserRegisterOutput,
+    UserAuthInput, UserAuthOutput,
+    UserLoginInput, UserLoginOutput,
+    UserRegisterInput, UserRegisterOutput,
 )
 
 
@@ -130,7 +127,7 @@ async def register_user(input: UserRegisterInput) -> UserRegisterOutput:
         return UserRegisterOutput(
             status=True,
             token=str(token) if token else "",
-            user_id=user_id,
+            user_id=str(user_id),
             username=user.username,
             email=user.email or "",
             roles=user.roles,
@@ -150,22 +147,22 @@ async def login_user(input: UserLoginInput) -> UserLoginOutput:
     3. 为用户签发 JWT Token
     4. 返回登录结果及 Token
     """
-    if not input.user_name or not input.password:
+    if not input.username or not input.password:
         raise ValueError("用户名和密码不能为空")
 
     async for session in get_db_session_slave():
         # 查询用户
-        stmt = select(User).where(User.username == input.user_name)
+        stmt = select(User).where(User.username == input.username)
         result = await session.execute(stmt)
         user = result.scalar_one_or_none()
 
         if user is None:
-            logger.warning("登录失败: 用户 '%s' 不存在", input.user_name)
+            logger.warning("登录失败: 用户 '%s' 不存在", input.username)
             raise ValueError("用户名或密码错误")
 
         # 验证密码
         if not verify_password(input.password, user.password_hash):
-            logger.warning("登录失败: 用户 '%s' 密码错误", input.user_name)
+            logger.warning("登录失败: 用户 '%s' 密码错误", input.username)
             raise ValueError("用户名或密码错误")
 
         # 生成 Token

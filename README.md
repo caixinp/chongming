@@ -21,6 +21,7 @@ Chongming 是一个基于 **NATS 消息队列**的现代化微服务框架，提
 | **分布式锁（6 种）** | 互斥锁、读写锁、信号量、可重入锁、租约锁、栅栏令牌锁 |
 | **OpenAPI 文档** | 动态路由自动生成 Swagger UI 文档 |
 | **分布式追踪** | request_id 贯穿 Gateway → Worker 全链路 |
+| **请求链路追踪** | `chongming trace` 实时追踪 NATS 请求-响应，关联 request_id 和耗时 |
 | **二进制部署** | PyInstaller 编译为单文件二进制，镜像仅 ~20MB |
 | **Docker 一键部署** | 开发/生产双模式 Docker Compose 编排 |
 
@@ -36,7 +37,7 @@ Worker 是 Chongming 微服务架构中的**业务逻辑执行单元**。每个 
 客户端 HTTP 请求
       │
       ▼
-┌──────────────┐     NATS Request/Reply     ┌──────────────────┐
+┌──────────────┐     NATS Request/Reply      ┌──────────────────┐
 │ API Gateway  │ ──────────────────────────→ │    Worker        │
 │  (FastAPI)   │                             │  (业务处理单元)   │
 │              │ ←────────────────────────── │                  │
@@ -230,7 +231,7 @@ EOF
 chongming/
 ├── api_gateway/            # ★ API Gateway — FastAPI 动态路由网关
 │   └── src/chongming_gateway/
-├── cli/                    # ★ CLI 工具 — 脚手架 & 构建
+├── cli/                    # ★ CLI 工具 — 脚手架 & 构建 & 追踪
 │   └── src/chongming_cli/
 ├── workers/                # ★ Worker 服务实例（你的业务代码放这里）
 │   ├── example/            #   Python Worker 完整示例（建议从这开始）
@@ -247,7 +248,10 @@ chongming/
 │   ├── config/             #   chongming-config — TOML 配置加载
 │   ├── cache/              #   chongming-cache — NATS JetStream KV 缓存
 │   ├── lock/               #   chongming-lock — 6 种分布式锁
-│   └── logging/            #   chongming-logging — 统一日志
+│   ├── logging/            #   chongming-logging — 统一日志 + 分布式追踪
+│   ├── jwt/                #   chongming-jwt — JWT 认证
+│   ├── database/           #   chongming-database — 数据库管理与迁移
+│   └── permission/         #   chongming-permission — 权限缓存
 ├── docker-env/             # ★ Docker 基础设施编排
 ├── front/                  # ★ Vue 3 管理面板
 └── docs/                   # ★ 技术文档
@@ -309,6 +313,9 @@ curl -X POST "http://localhost:8000/api/v1/order/create" \
   -H "Content-Type: application/json" \
   -d '{"user_id": "u001", "amount": 30, "item": "book"}'
 
+# 追踪请求-响应链路
+chongming trace calc.add --follow
+
 # Swagger UI
 open http://localhost:8000/docs
 ```
@@ -321,12 +328,15 @@ open http://localhost:8000/docs
 |------|----------|------|
 | **[Worker 框架 (Python)](utils/python/worker/README.md)** | **所有开发者（从这里开始）** | Worker 生命周期、handler 开发、服务间通信、**config.toml 各字段详解** |
 | **[Worker 示例](workers/example/README.md)** | **初学者** | **基于 config.toml 的完整功能演示**，覆盖全部特性 |
-| **[CLI 工具](cli/README.md)** | 所有开发者 | 脚手架创建、模型生成、构建部署、**config.toml 完整参考** |
+| **[CLI 工具](cli/README.md)** | 所有开发者 | 脚手架创建、模型生成、构建部署、**trace 链路追踪**、**config.toml 完整参考** |
 | **[API Gateway](api_gateway/README.md)** | 后端开发者 | 网关配置、部署、API 参考 |
 | **[Docker 部署](docker-env/README.md)** | DevOps | 基础设施部署、生产环境配置 |
 | **[Worker 框架 (Rust)](utils/rust/worker/README.md)** | Rust 开发者 | Rust Worker 开发指南 |
 | **[分布式锁](utils/lock/README.md)** | 高级开发者 | 6 种锁类型及使用示例 |
 | **[缓存工具](utils/cache/README.md)** | 开发者 | NATS JetStream KV 缓存使用 |
+| **[JWT 认证](utils/jwt/README.md)** | 后端开发者 | Token 创建与验证 |
+| **[数据库工具](utils/database/README.md)** | 后端开发者 | 数据库连接管理 + Alembic 迁移 |
+| **[权限管理](utils/permission/README.md)** | 开发者 | 基于 NATS KV 的分布式权限缓存 |
 | **[前端面板](front/chongming_front/README.md)** | 前端开发者 | Vue 3 管理面板开发 |
 | **[API 参考](docs/api/README.md)** | 框架开发者 | 完整内部 API 技术文档 |
 
@@ -334,6 +344,7 @@ open http://localhost:8000/docs
 
 - **👤 新手入门** → `utils/python/worker/README.md` → `workers/example/README.md` → `cli/README.md`
 - **🔧 开发 Worker** → 先看 `config.toml` → `utils/python/worker/README.md` → `workers/example/README.md`
+- **🔍 调试追踪** → `cli/README.md#trace` → `chongming trace --help`
 - **🚀 生产部署** → `cli/README.md` → `docker-env/README.md`
 
 ---
@@ -363,6 +374,29 @@ open http://localhost:8000/docs
 4. **Worker** → 接收消息 → 提取 request_id（分布式追踪）→ 解析参数 → 调用业务 handler
 5. **Worker** → 返回结果 → Gateway 响应客户端
 6. **Swagger UI** → `http://localhost:8000/docs` 自动展示所有动态路由
+
+### 调试：实时追踪请求链路
+
+```bash
+# 追踪一次请求-响应
+chongming trace user.register
+
+# 持续追踪（按 Ctrl+C 停止）
+chongming trace calc.add --follow --pretty
+
+# 追踪 3 对后退出
+chongming trace order.create --count 3 --no-response-payload
+```
+
+输出示例：
+
+```
+[2026-06-04 10:00:00] [request_id=abc-123] REQ user.register (duration: waiting...)
+Payload: {"username": "admin123", "password": "***", "email": "admin@example.com"}
+
+[2026-06-04 10:00:01] [request_id=abc-123] RSP (took 1.02s)
+Payload: {"status": true, "user_id": 1001, "token": "***"}
+```
 
 ---
 
@@ -420,6 +454,7 @@ curl http://localhost:8080/health
 - 不包含源码，保护知识产权
 
 ---
+
 ## 🤝 贡献指南
 
 1. Fork 本仓库

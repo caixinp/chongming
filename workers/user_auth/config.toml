@@ -42,8 +42,8 @@ items = [
         subject = "user.login",
         path = "/user/login",
         shared = true,
-        docstring = "用户登录",
-        params = ["user_name: str", "password: str"],
+        summary = "用户登录",
+        params = ["username: str", "password: str"],
         response_model = {
             status = { type = "bool", required = true },
             token = { type = "str", required = true },
@@ -64,7 +64,7 @@ items = [
         response_model = {
             status = { type = "bool", required = true },
             token = { type = "str", required = true },
-            user_id = { type = "int", required = true },
+            user_id = { type = "str", required = true },
             username = { type = "str", required = true },
             email = { type = "str", required = true },
             roles = { type = "list", required = true },
@@ -90,7 +90,7 @@ items = [
         path = "/user/get",
         shared = true,
         summary = "获取用户",
-        params = ["user_id: int"],
+        params = ["user_id: str"],
         response_model = {
             id = { type = "int", required = true },
             username = { type = "str", required = true },
@@ -104,7 +104,7 @@ items = [
         path = "/user/update",
         shared = true,
         summary = "更新用户",
-        params = ["user_id: int", "username: str", "email: str", "roles: list[str]"],
+        params = ["user_id: str", "username: str", "email: str", "roles: list[str]"],
         response_model = {
             id = { type = "int", required = true },
             username = { type = "str", required = true },
@@ -118,7 +118,7 @@ items = [
         path = "/user/delete",
         shared = true,
         summary = "删除用户",
-        params = ["user_id: int"],
+        params = ["user_id: str"],
         response_model = {
             status = { type = "bool", required = true },
             message = { type = "str", required = true }
@@ -258,7 +258,7 @@ items = [
         subject = "userrole.assign",
         path = "/userrole/assign",
         summary = "为用户分配角色",
-        params = ["user_id: int", "role_name: str"],
+        params = ["user_id: str", "role_name: str"],
         response_model = {
             status = { type = "bool", required = true },
             message = { type = "str", required = true }
@@ -268,7 +268,7 @@ items = [
         subject = "userrole.revoke",
         path = "/userrole/revoke",
         summary = "撤销用户角色",
-        params = ["user_id: int", "role_name: str"],
+        params = ["user_id: str", "role_name: str"],
         response_model = {
             status = { type = "bool", required = true },
             message = { type = "str", required = true }
@@ -278,9 +278,9 @@ items = [
         subject = "userrole.list",
         path = "/userrole/list",
         summary = "查询用户角色和权限",
-        params = ["user_id: int"],
+        params = ["user_id: str"],
         response_model = {
-            user_id = { type = "int", required = true },
+            user_id = { type = "str", required = true },
             username = { type = "str", required = true },
             roles = { type = "list", required = true },
             permissions = { type = "list", required = true }

@@ -14,6 +14,8 @@ from .commands.docker import add_docker_parser, handle_docker
 from .commands.image_export import add_image_export_parser, handle_image_export
 from .commands.log_export import add_log_export_parser, handle_log_export
 from .commands.migrate import add_db_parser, handle_db
+from .commands.trace import add_trace_parser, handle_trace
+from .commands.request import add_request_parser, handle_request
 
 
 def main():
@@ -39,6 +41,8 @@ def main():
     add_docker_parser(subparsers)
     add_image_export_parser(subparsers)
     add_log_export_parser(subparsers)
+    add_trace_parser(subparsers)
+    add_request_parser(subparsers)
 
     # ── 数据库迁移 ─────────────────────────────────────────────
     add_db_parser(subparsers)
@@ -70,6 +74,10 @@ def main():
         handle_image_export(args)
     elif args.command == "log-export":
         handle_log_export(args)
+    elif args.command == "trace":
+        handle_trace(args)
+    elif args.command == "request":
+        handle_request(args)
 
     # ── 数据库迁移 ──
     elif args.command == "db":

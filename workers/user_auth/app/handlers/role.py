@@ -67,14 +67,22 @@ async def get_role(input: RoleGetInput) -> RoleGetOutput:
             raise ValueError(f"角色不存在: {input.role_id}")
 
         # 获取角色的权限列表
-        permissions: List[str] = []
         rp_stmt = (
-            select(Permission.name)
+            select(Permission)
             .join(RolePermission, RolePermission.permission_id == Permission.id) # type: ignore
             .where(RolePermission.role_id == role.id)
         )
-        rp_result = await session.execute(rp_stmt)
-        permissions = list(rp_result.scalars().all())
+        rp_result = await session.exec(rp_stmt)
+        permissions = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "resource": p.resource,
+                "action": p.action,
+                "description": p.description,
+            }
+            for p in rp_result.all()
+        ]
 
         return RoleGetOutput(
             id=role.id, # type: ignore

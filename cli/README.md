@@ -1,9 +1,8 @@
 # Chongming CLI — 项目管理与构建工具
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![Typer](https://img.shields.io/badge/typer-0.12-blue.svg)](https://typer.tiangolo.com/)
 
-一站式项目管理命令行工具，覆盖微服务全生命周期：项目脚手架创建、模型代码生成、Docker 镜像构建、生产级二进制打包、本地开发服务器启动、日志导出和数据库迁移管理。
+一站式项目管理命令行工具，覆盖微服务全生命周期：项目脚手架创建、模型代码生成、Docker 镜像构建、生产级二进制打包、本地开发服务器启动、日志导出、NATS 链路追踪、直接请求发送和数据库迁移管理。
 
 ---
 
@@ -30,6 +29,8 @@ chongming
 ├── gen-models      从 config.toml 生成 Pydantic 模型
 ├── gateway         启动 API Gateway
 ├── worker          启动 Worker
+├── trace           实时追踪 NATS 请求-响应链路（支持多 subject）
+├── request         直接向 NATS subject 发送请求（绕过网关）
 ├── docker-build    构建 Docker 镜像
 ├── binary-build    构建二进制 Docker 镜像（推荐生产）
 ├── docker          Docker Compose 环境管理
@@ -180,6 +181,171 @@ chongming worker --list
 **自动检测：**
 - 存在 `Cargo.toml` → Rust Worker → `cargo run`
 - 否则 → Python Worker → `uv run python main.py`
+
+---
+
+## chongming trace — NATS 请求链路追踪
+
+实时或历史追踪 NATS 请求-响应链路，自动关联 `request_id` 并打印格式化的彩色输出。支持同时监听多个 subject。
+
+```bash
+# 追踪单个 subject
+chongming trace user.register
+
+# 同时追踪多个 subject
+chongming trace user.login user.register calc.add --follow
+
+# 持续追踪
+chongming trace calc.add --follow
+
+# 追踪 3 对后退出
+chongming trace order.create --count 3
+
+# 美化输出，隐藏 payload
+chongming trace calc.add --pretty --no-request-payload --no-response-payload
+
+# 回放最近 1 小时历史（需要 JetStream）
+chongming trace user.register --since 1h --js
+
+# 指定 NATS 连接参数
+chongming trace user.register --host nats.example.com --port 4222 --creds ./nats.creds
+```
+
+| 参数 | 说明 |
+|------|------|
+| `subjects` | 要追踪的业务主题（支持多个），如 `user.register` |
+| `--follow`, `-f` | 持续监听，直到手动停止（Ctrl+C） |
+| `--count`, `-n` | 接收 N 对请求-响应后退出（默认 1，`--follow` 模式下无限） |
+| `--since` | 使用 JetStream 回放最近一段时间的历史消息（如 `1h`、`30m`），自动启用 `--js` |
+| `--js` | 启用 JetStream 模式 |
+| `--pretty` | 美化输出 JSON（多行缩进） |
+| `--no-request-payload` | 不打印请求 payload |
+| `--no-response-payload` | 不打印响应 payload |
+
+**NATS 连接参数：** `--host`、`--port`、`--user`、`--password`、`--token`、`--creds`、`--nkey`、`--tls`、`--tls-cert`、`--tls-key`、`--tls-ca`
+
+**JetStream 参数：** `--stream`（指定 stream 名称）、`--js-domain`
+
+### 工作原理
+
+1. 订阅所有业务 subject（支持同时监听多个主题）
+2. 捕获请求消息 → 提取 `request_id`（从 headers）和 `reply` 主题
+3. 动态订阅 reply 主题（每个请求独立订阅，用完即取消）
+4. 收到响应 → 计算耗时 → 格式化输出
+5. 5 秒超时 → 打印超时提示
+
+### 输出示例
+
+```
+[2026-06-04 10:00:00] [request_id=abc-123] REQ user.register (duration: waiting...)
+  Payload: {"username": "admin123", "password": "***", "email": "admin@example.com"}
+
+[2026-06-04 10:00:01] [request_id=abc-123] RSP (took 1.02s)
+  Payload: {"status": true, "user_id": 1001, "token": "***"}
+```
+
+### 特性
+
+- **彩色输出**：时间戳（暗色）、REQ（绿色）、RSP（蓝色）、超时（红色）、request_id（黄色）、耗时（品红色）
+- **多 subject 支持**：可同时监听多个业务主题，消息按实际 subject 分组显示
+- **request_id 关联**：从 NATS headers 提取 `request_id` 自动关联请求与响应
+- **自动脱敏**：`password`、`token`、`secret` 等字段自动替换为 `***`
+- **动态 reply 订阅**：每个请求独立订阅其 reply 主题，避免通配符订阅的开销
+- **超时处理**：5 秒未收到响应打印超时提示并继续
+- **并发安全**：多请求同时在途时独立管理各自状态
+- **JetStream 历史回放**：通过 `--since 1h --js` 回放最近一小时的请求-响应
+
+---
+
+## chongming request — 直接发送 NATS 请求
+
+直接向 NATS subject 发送请求（绕过 API Gateway），适用于本地调试和测试脚本。支持 CLI 命令和 Python 函数导入两种使用方式。
+
+### CLI 使用
+
+```bash
+# 携带 JSON payload 发送请求
+chongming request user.register --data '{"email": "test@example.com", "password": "123456"}'
+
+# 从文件读取 payload
+chongming request user.register --file payload.json
+
+# 通过管道 stdin 传入
+echo '{"email": "test@example.com"}' | chongming request user.register
+
+# 美化输出
+chongming request user.register --data '{"email": "test@example.com"}' --pretty
+
+# 自定义超时
+chongming request user.login --data '{"email": "test@example.com"}' --timeout 10
+
+# 指定 NATS 连接参数
+chongming request user.register --data '{"email": "test@example.com"}' --host nats.example.com --port 4222 --creds ./nats.creds
+```
+
+| 参数 | 说明 |
+|------|------|
+| `subject` | 要请求的业务主题，如 `user.register` |
+| `--data`, `-d` | 请求 JSON payload（字符串） |
+| `--file`, `-f` | 从文件读取请求 payload（JSON） |
+| `--timeout`, `-t` | 请求超时秒数（默认 10 秒） |
+| `--pretty` | 美化输出响应 JSON |
+
+**NATS 连接参数：** `--host`、`--port`、`--user`、`--password`、`--token`、`--creds`、`--nkey`、`--tls`、`--tls-cert`、`--tls-key`、`--tls-ca`
+
+### 测试脚本使用（Python）
+
+```python
+import asyncio
+from chongming_cli.commands.request import send_request
+
+async def test_register():
+    result = await send_request(
+        "user.register",
+        {"email": "test@example.com", "password": "123456"},
+        timeout=10,
+    )
+    assert result["status"] is True
+
+async def test_with_auth():
+    result = await send_request(
+        "user.login",
+        {"email": "test@example.com", "password": "123456"},
+        host="nats.example.com",
+        port=4222,
+        user="admin",
+        password="secret",
+    )
+    print(result["token"])
+
+asyncio.run(test_register())
+```
+
+`send_request` 参数说明：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `subject` | `str` | 必填 | NATS 业务主题 |
+| `payload` | `dict` | 必填 | 请求数据 |
+| `host` | `str` | `"localhost"` | NATS 服务器地址 |
+| `port` | `int` | `4222` | NATS 服务器端口 |
+| `timeout` | `float` | `10.0` | 请求超时秒数 |
+| `token` | `str` | `None` | NATS 认证令牌 |
+| `user` | `str` | `None` | NATS 用户名 |
+| `password` | `str` | `None` | NATS 密码 |
+| `creds` | `str` | `None` | 用户凭证文件路径 |
+| `nkey` | `str` | `None` | NKEY 种子文件路径 |
+| `tls` | `bool` | `False` | 启用 TLS |
+| `tls_ca` | `str` | `None` | TLS CA 证书路径 |
+| `tls_cert` | `str` | `None` | TLS 客户端证书路径 |
+| `tls_key` | `str` | `None` | TLS 客户端密钥路径 |
+
+**返回值：** 解析后的响应 `dict`
+
+**可能抛出的异常：**
+- `asyncio.TimeoutError` — 请求超时
+- `nats.errors.NoRespondersError` — 没有 Worker 订阅该 subject
+- `nats.errors.BadSubjectError` — 无效的 subject
 
 ---
 
@@ -389,11 +555,6 @@ items = [
         auth_required = false,          # 是否需 JWT 认证
     },
 ]
-
-[logging.minio]
-enabled = true
-endpoint = "localhost:9000"
-bucket = "chongming-logs"
 ```
 
 完整配置详解参考 [Worker 生命周期框架文档](../utils/python/worker/README.md#configtoml-配置参考)。
@@ -408,18 +569,20 @@ chongming/
 │   ├── pyproject.toml
 │   └── src/
 │       └── chongming_cli/
-│           ├── __main__.py       # 入口：typer 应用
+│           ├── __init__.py       # 入口 + 子命令注册
 │           └── commands/
 │               ├── new.py         # 创建项目
 │               ├── gen_models.py  # 模型生成
 │               ├── gateway.py     # Gateway 启动
 │               ├── worker.py      # Worker 启动
+│               ├── trace.py       # NATS 链路追踪（多 subject + 彩色输出）
+│               ├── request.py     # NATS 直接请求（CLI + 测试脚本）
 │               ├── docker_build.py# Docker 构建
 │               ├── binary_build.py# 二进制构建
 │               ├── docker.py     # Docker 环境
 │               ├── image_export.py# 镜像导出
 │               ├── log_export.py # 日志导出
-│               └── gen_migrate.py # 数据库迁移
+│               └── migrate.py    # 数据库迁移
 ├── workers/                      # ← Worker 实例（被操作对象）
 ├── templates/                    # ← 项目模板（被 new 命令读取）
 ├── utils/python/worker/          # ← Worker 框架（被 worker 命令启动）

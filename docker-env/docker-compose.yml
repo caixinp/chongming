@@ -16,7 +16,7 @@ volumes:
 services:
   # ========== NATS 集群（3节点） ==========
   nats-1:
-    image: nats:2.10-alpine
+    image: nats:latest
     container_name: nats-1
     command: ["-c", "/etc/nats/nats.conf"]
     volumes:
@@ -29,7 +29,7 @@ services:
       - microservices-net
 
   nats-2:
-    image: nats:2.10-alpine
+    image: nats:latest
     container_name: nats-2
     command: ["-c", "/etc/nats/nats.conf"]
     volumes:

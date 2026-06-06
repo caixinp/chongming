@@ -81,7 +81,7 @@ class GatewayConfigStore:
         """发布当前配置到 NATS KV（带分布式锁保护）"""
         try:
             async with MutexLock(
-                self._cache,
+                self._cache, # type: ignore
                 _GW_CONFIG_LOCK_KEY,
                 ttl=_LOCK_TTL,
             )(timeout=_LOCK_TIMEOUT):

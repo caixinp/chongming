@@ -27,11 +27,12 @@ RBAC 种子数据初始化模块
 import logging
 from typing import List, Dict, Any, Optional, Set
 import json
+import time
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.database_models import Role, Permission, RolePermission
+from app.database_models import User, Role, Permission, RolePermission, UserRole
 from chongming_cache import ChongmingCache
 
 
@@ -432,3 +433,94 @@ async def seed_default_rbac(
 
     await session.commit()
     logger.info("RBAC 数据初始化完成（基于网关 KV 路由注册表）")
+
+
+# ── 默认管理员用户 ────────────────────────────────────────────
+
+# 默认管理员账户凭证
+DEFAULT_ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_PASSWORD = "123456"
+
+
+async def seed_default_admin_user(session: AsyncSession) -> None:
+    """初始化默认管理员用户 admin（启动时调用）
+
+    幂等操作：如果 admin 用户已存在则跳过。
+    创建后自动绑定 superadmin 角色，拥有所有权限。
+
+    Args:
+        session: 数据库会话
+    """
+    from app.utils.password import hash_password
+    from app.utils.snowflake import snowflake_generator
+
+    # 检查 admin 用户是否已存在
+    stmt = select(User).where(User.username == DEFAULT_ADMIN_USERNAME)
+    result = await session.execute(stmt)
+    existing = result.scalar_one_or_none()
+
+    if existing is not None:
+        logger.info("默认管理员用户 '%s' 已存在，跳过初始化", DEFAULT_ADMIN_USERNAME)
+        return
+
+    # 查询 superadmin 角色
+    stmt = select(Role).where(Role.name == "superadmin")
+    result = await session.execute(stmt)
+    superadmin_role = result.scalar_one_or_none()
+
+    if superadmin_role is None:
+        logger.warning("superadmin 角色不存在，默认管理员用户将无角色绑定")
+    else:
+        logger.debug("已找到 superadmin 角色 (id=%s)，将自动绑定", superadmin_role.id)
+
+    # 创建管理员用户
+    user_id = snowflake_generator.next_id()
+    password_hash = hash_password(DEFAULT_ADMIN_PASSWORD)
+
+    admin_user = User(
+        id=user_id,
+        username=DEFAULT_ADMIN_USERNAME,
+        password_hash=password_hash,
+        email="admin@chongming.local",
+        roles=["superadmin", "admin", "user"],
+        is_superuser=True,
+        is_active=True,
+        created_at=time.time(),
+    )
+    session.add(admin_user)
+    await session.flush()
+
+    # 绑定 superadmin 角色关系
+    if superadmin_role is not None:
+        try:
+            # 先绑定 superadmin
+            stmt = select(UserRole).where(
+                UserRole.user_id == admin_user.id,
+                UserRole.role_id == superadmin_role.id,
+            )
+            result = await session.execute(stmt)
+            if result.scalar_one_or_none() is None:
+                user_role = UserRole(user_id=admin_user.id, role_id=superadmin_role.id)  # type: ignore
+                session.add(user_role)
+
+            # 也绑定 admin 角色
+            stmt = select(Role).where(Role.name == "admin")
+            result = await session.execute(stmt)
+            admin_role = result.scalar_one_or_none()
+            if admin_role is not None:
+                stmt = select(UserRole).where(
+                    UserRole.user_id == admin_user.id,
+                    UserRole.role_id == admin_role.id,
+                )
+                result = await session.execute(stmt)
+                if result.scalar_one_or_none() is None:
+                    user_role = UserRole(user_id=admin_user.id, role_id=admin_role.id)  # type: ignore
+                    session.add(user_role)
+        except Exception as e:
+            logger.warning("绑定默认管理员角色失败: %s", e)
+
+    await session.commit()
+    logger.info(
+        "默认管理员用户 'admin' 已创建 (id=%s, superuser=True, roles=superadmin+admin+user)",
+        admin_user.id,
+    )

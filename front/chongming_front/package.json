@@ -9,14 +9,18 @@
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
-    "format": "prettier --write --experimental-cli src/"
+    "format": "prettier --write --experimental-cli src/",
+    "openapi": "npx @hey-api/openapi-ts --input http://127.0.0.1:8000/openapi.json --output ./src/api/generated/"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "element-plus": "^2.13.7",
     "pinia": "^3.0.4",
-    "vue": "^3.5.32",
+    "vue": "^3.5.31",
     "vue-router": "^5.0.4"
   },
   "devDependencies": {
+    "@hey-api/openapi-ts": "^0.96.1",
     "@tsconfig/node24": "^24.0.4",
     "@types/node": "^24.12.2",
     "@vitejs/plugin-vue": "^6.0.6",

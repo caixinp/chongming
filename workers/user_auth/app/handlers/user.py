@@ -82,7 +82,7 @@ async def get_user(input: UserGetInput) -> UserGetOutput:
     读操作 → 使用从库会话
     """
     async for session in get_db_session_slave():
-        user = await session.get(User, input.user_id)
+        user = await session.get(User, int(input.user_id))
         if user is None:
             raise ValueError(f"用户不存在: {input.user_id}")
 
@@ -105,7 +105,7 @@ async def update_user(input: UserUpdateInput) -> UserUpdateOutput:
     混合操作（先查后写）→ 全部使用主库会话，避免主从延迟
     """
     async for session in get_db_session_master():
-        user = await session.get(User, input.user_id)
+        user = await session.get(User, int(input.user_id))
         if user is None:
             raise ValueError(f"用户不存在: {input.user_id}")
 
@@ -139,7 +139,7 @@ async def delete_user(input: UserDeleteInput) -> UserDeleteOutput:
     写操作 → 使用主库会话
     """
     async for session in get_db_session_master():
-        user = await session.get(User, input.user_id)
+        user = await session.get(User, int(input.user_id))
         if user is None:
             raise ValueError(f"用户不存在: {input.user_id}")
 

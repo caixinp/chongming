@@ -12,12 +12,14 @@ from sqlmodel import select
 from app.bootstrap import app
 from app.database_models import User, Role, UserRole, Permission, RolePermission
 from chongming_permission import invalidate_user_permissions, get_user_permissions
+from .role import get_role
 from ..listeners import get_db_session_master, get_db_session_slave
 
 from models import (
     UserRoleAssignInput, UserRoleAssignOutput,
     UserRoleRevokeInput, UserRoleRevokeOutput,
     UserRoleListInput, UserRoleListOutput,
+    RoleGetInput
 )
 
 logger = logging.getLogger("chongming.worker.user_auth")
@@ -31,7 +33,7 @@ async def assign_user_role(input: UserRoleAssignInput) -> UserRoleAssignOutput:
     """
     async for session in get_db_session_master():
         # 检查用户
-        user = await session.get(User, input.user_id)
+        user = await session.get(User, int(input.user_id))
         if user is None:
             raise ValueError(f"用户不存在: {input.user_id}")
 
@@ -88,7 +90,7 @@ async def revoke_user_role(input: UserRoleRevokeInput) -> UserRoleRevokeOutput:
     """
     async for session in get_db_session_master():
         # 检查用户
-        user = await session.get(User, input.user_id)
+        user = await session.get(User, int(input.user_id))
         if user is None:
             raise ValueError(f"用户不存在: {input.user_id}")
 
@@ -141,26 +143,33 @@ async def revoke_user_role(input: UserRoleRevokeInput) -> UserRoleRevokeOutput:
 async def list_user_roles(input: UserRoleListInput) -> UserRoleListOutput:
     """查询用户的角色和权限"""
     async for session in get_db_session_slave():
-        user = await session.get(User, input.user_id)
+        user = await session.get(User, int(input.user_id))
         if user is None:
             raise ValueError(f"用户不存在: {input.user_id}")
 
         # 获取角色列表
         role_stmt = (
-            select(Role.name)
+            select(Role)
             .join(UserRole, UserRole.role_id == Role.id) # type: ignore
             .where(UserRole.user_id == user.id)
         )
-        role_result = await session.execute(role_stmt)
-        role_names = list(role_result.scalars().all())
+        role_result = await session.exec(role_stmt)
+        roles = list(role_result.all())
 
         # 获取权限列表（优先使用缓存）
-        permissions = await get_user_permissions(str(user.id))
+        permissions = []
+        for perm in roles:
+            if perm.id is None:
+                continue
+            role = await get_role(RoleGetInput(role_id=perm.id))
+            for p in role.permissions:
+                if p not in permissions:
+                    permissions.append(p)
 
         return UserRoleListOutput(
-            user_id=user.id, # type: ignore
+            user_id=str(user.id), # type: ignore
             username=user.username,
-            roles=role_names,
+            roles=roles,
             permissions=permissions,
         )
 

@@ -8,10 +8,10 @@ RBAC 模型关系：
 - Role ──┬── RolePermission ── Permission
          └── UserRole ──────── User
 """
+from typing import Optional, List
 
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import Column, ForeignKey, UniqueConstraint, BigInteger
-from typing import Optional, List
 from sqlalchemy.dialects.postgresql import JSONB
 
 

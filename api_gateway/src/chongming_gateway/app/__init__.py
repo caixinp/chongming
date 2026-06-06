@@ -16,11 +16,11 @@ NATS 消息订阅和后台过期清理任务等。
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import nats
 import asyncio
 import json
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from .core.nats_client import get_nats_client
 from .core.dynamic_route import DynamicRoute
@@ -235,13 +235,22 @@ app = FastAPI(
     },
 )
 
+# ── CORS 中间件（允许前端跨域访问） ─────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 生产环境应限制为具体域名
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # ── 注册 OpenAPI 全局安全方案（使 /docs 显示 Authorize 按钮） ─
 def custom_openapi():
     """自定义 OpenAPI schema，注入 JWT Bearer 安全方案"""
     if app.openapi_schema:
         return app.openapi_schema
-    openapi_schema = app._original_openapi()
+    openapi_schema = app._original_openapi() # type: ignore
     # 注入 securitySchemes 组件
     openapi_schema.setdefault("components", {}).setdefault("securitySchemes", {})
     openapi_schema["components"]["securitySchemes"]["JWT"] = {
@@ -257,8 +266,8 @@ def custom_openapi():
 
 
 # 保存原始 openapi 方法并替换
-app._original_openapi = app.openapi
-app.openapi = custom_openapi
+app._original_openapi = app.openapi # type: ignore
+app.openapi = custom_openapi # type: ignore
 
 
 # ── 健康检查端点 ──────────────────────────────────────────

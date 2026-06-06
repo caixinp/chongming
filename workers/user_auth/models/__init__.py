@@ -13,10 +13,10 @@ from pydantic import BaseModel, Field
 class UserAuthInput(BaseModel):
     """USER.AUTH 请求参数模型"""
     user_id: str
-    roles: list
+    roles: List[str]
     username: str
     email: str
-    other: dict
+    other: Dict[str,Any]
 
 
 class UserAuthOutput(BaseModel):
@@ -28,7 +28,7 @@ class UserAuthOutput(BaseModel):
 
 class UserLoginInput(BaseModel):
     """USER.LOGIN 请求参数模型"""
-    user_name: str
+    username: str
     password: str
 
 
@@ -39,8 +39,26 @@ class UserLoginOutput(BaseModel):
     user_id: str
     username: str
     email: str
-    other: dict
+    other: dict = Field(default_factory=dict)
     roles: str
+    timestamp: float = 0.0
+
+
+class UserRegisterInput(BaseModel):
+    """USER.REGISTER 请求参数模型"""
+    username: str
+    password: str
+    email: str
+
+
+class UserRegisterOutput(BaseModel):
+    """USER.REGISTER 响应结果模型"""
+    status: bool
+    token: str
+    user_id: str
+    username: str
+    email: str
+    roles: list = Field(default_factory=list)
     timestamp: float = 0.0
 
 
@@ -49,7 +67,7 @@ class UserCreateInput(BaseModel):
     username: str
     password_hash: str
     email: str
-    roles: list
+    roles: List[str]
 
 
 class UserCreateOutput(BaseModel):
@@ -57,13 +75,13 @@ class UserCreateOutput(BaseModel):
     id: int
     username: str
     email: str
-    roles: list
+    roles: list = Field(default_factory=list)
     created_at: float
 
 
 class UserGetInput(BaseModel):
     """USER.GET 请求参数模型"""
-    user_id: int
+    user_id: str
 
 
 class UserGetOutput(BaseModel):
@@ -71,15 +89,15 @@ class UserGetOutput(BaseModel):
     id: int
     username: str
     email: str
-    roles: list
+    roles: list = Field(default_factory=list)
 
 
 class UserUpdateInput(BaseModel):
     """USER.UPDATE 请求参数模型"""
-    user_id: int
+    user_id: str
     username: str
     email: str
-    roles: list
+    roles: List[str]
 
 
 class UserUpdateOutput(BaseModel):
@@ -87,36 +105,18 @@ class UserUpdateOutput(BaseModel):
     id: int
     username: str
     email: str
-    roles: list
+    roles: list = Field(default_factory=list)
 
 
 class UserDeleteInput(BaseModel):
     """USER.DELETE 请求参数模型"""
-    user_id: int
+    user_id: str
 
 
 class UserDeleteOutput(BaseModel):
     """USER.DELETE 响应结果模型"""
     status: bool
     message: str
-
-
-class UserRegisterInput(BaseModel):
-    """USER.REGISTER 请求参数模型"""
-    username: str
-    password: str
-    email: str = ""
-
-
-class UserRegisterOutput(BaseModel):
-    """USER.REGISTER 响应结果模型"""
-    status: bool
-    token: str
-    user_id: int
-    username: str
-    email: str
-    roles: list
-    timestamp: float = 0.0
 
 
 class UserListInput(BaseModel):
@@ -127,19 +127,16 @@ class UserListInput(BaseModel):
 
 class UserListOutput(BaseModel):
     """USER.LIST 响应结果模型"""
-    users: list
+    users: list = Field(default_factory=list)
     total: int
     offset: int
     limit: int
 
 
-# ── 角色管理模型 ──────────────────────────────────────────────────
-
-
 class RoleCreateInput(BaseModel):
     """ROLE.CREATE 请求参数模型"""
     name: str
-    description: str = ""
+    description: str
 
 
 class RoleCreateOutput(BaseModel):
@@ -161,14 +158,14 @@ class RoleGetOutput(BaseModel):
     name: str
     description: str
     is_system: bool
-    permissions: List[str]
+    permissions: list = Field(default_factory=list)
 
 
 class RoleUpdateInput(BaseModel):
     """ROLE.UPDATE 请求参数模型"""
     role_id: int
-    name: str = ""
-    description: str = ""
+    name: str
+    description: str
 
 
 class RoleUpdateOutput(BaseModel):
@@ -192,13 +189,13 @@ class RoleDeleteOutput(BaseModel):
 
 class RoleListInput(BaseModel):
     """ROLE.LIST 请求参数模型"""
-    offset: int = 0
-    limit: int = 20
+    offset: int
+    limit: int
 
 
 class RoleListOutput(BaseModel):
     """ROLE.LIST 响应结果模型"""
-    roles: list
+    roles: list = Field(default_factory=list)
     total: int
 
 
@@ -226,15 +223,12 @@ class RoleRevokePermissionOutput(BaseModel):
     message: str
 
 
-# ── 权限管理模型 ──────────────────────────────────────────────────
-
-
 class PermissionCreateInput(BaseModel):
     """PERMISSION.CREATE 请求参数模型"""
     name: str
     resource: str
     action: str
-    description: str = ""
+    description: str
 
 
 class PermissionCreateOutput(BaseModel):
@@ -248,14 +242,14 @@ class PermissionCreateOutput(BaseModel):
 
 class PermissionListInput(BaseModel):
     """PERMISSION.LIST 请求参数模型"""
-    offset: int = 0
-    limit: int = 50
-    resource: str = ""
+    offset: int
+    limit: int
+    resource: str
 
 
 class PermissionListOutput(BaseModel):
     """PERMISSION.LIST 响应结果模型"""
-    permissions: list
+    permissions: list = Field(default_factory=list)
     total: int
 
 
@@ -270,12 +264,9 @@ class PermissionDeleteOutput(BaseModel):
     message: str
 
 
-# ── 用户角色分配模型 ──────────────────────────────────────────────
-
-
 class UserRoleAssignInput(BaseModel):
     """USERROLE.ASSIGN 请求参数模型"""
-    user_id: int
+    user_id: str
     role_name: str
 
 
@@ -287,7 +278,7 @@ class UserRoleAssignOutput(BaseModel):
 
 class UserRoleRevokeInput(BaseModel):
     """USERROLE.REVOKE 请求参数模型"""
-    user_id: int
+    user_id: str
     role_name: str
 
 
@@ -299,12 +290,13 @@ class UserRoleRevokeOutput(BaseModel):
 
 class UserRoleListInput(BaseModel):
     """USERROLE.LIST 请求参数模型"""
-    user_id: int
+    user_id: str
 
 
 class UserRoleListOutput(BaseModel):
     """USERROLE.LIST 响应结果模型"""
-    user_id: int
+    user_id: str
     username: str
-    roles: list
-    permissions: List[str]
+    roles: list = Field(default_factory=list)
+    permissions: list = Field(default_factory=list)
+
